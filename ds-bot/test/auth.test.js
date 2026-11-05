@@ -32,7 +32,7 @@ test('isAllowedDomain accepts only the corporate domains and their subdomains', 
   assert.equal(isAllowedDomain('engineer@sub.iruzlabs.com'), true)
   assert.equal(isAllowedDomain('LUIS@IRUZLABS.COM'), true)
 
-  assert.equal(isAllowedDomain('user@gmail.com'), false)
+  assert.equal(isAllowedDomain('user@example.org'), false)
   assert.equal(isAllowedDomain('user@eviliruzlabs.com'), false)
   assert.equal(isAllowedDomain('user@iruzlabs.com.evil.test'), false)
   assert.equal(isAllowedDomain('@iruzlabs.com'), false)
@@ -65,7 +65,7 @@ test('direct sign-in is off unless turned on, and its sessions end when it is tu
   assert.equal(off.authView().devLogin, false)
 
   const on = runtime({ authRequired: true, authDevLogin: true })
-  await assert.rejects(on.authEndpoint('auth-dev-login', { email: 'hacker@gmail.com' }), /Only accounts from @iruzlabs\.com, @azurylabs\.online can sign in/)
+  await assert.rejects(on.authEndpoint('auth-dev-login', { email: 'hacker@example.org' }), /Only accounts from @iruzlabs\.com, @azurylabs\.online can sign in/)
   const view = await on.authEndpoint('auth-dev-login', { email: 'Luis@IruzLabs.com', name: 'Luis Ramírez', provider: 'microsoft' })
   assert.equal(view.user.email, 'luis@iruzlabs.com')
   assert.equal(view.user.provider, 'microsoft')
@@ -106,7 +106,7 @@ test('Google sign-in trusts only verified Workspace accounts on an allowed domai
   // A consumer Google account opened with a corporate address carries no `hd`.
   await assert.rejects(profile(googleClaims({ hd: undefined })), /Account not allowed/)
   await assert.rejects(profile(googleClaims({ email_verified: false })), /Account not allowed/)
-  await assert.rejects(profile(googleClaims({ email: 'luis@gmail.com', hd: 'gmail.com' })), /Account not allowed/)
+  await assert.rejects(profile(googleClaims({ email: 'luis@example.org', hd: 'example.org' })), /Account not allowed/)
   await assert.rejects(profile(googleClaims({ aud: 'someone-else' })), /another app/)
   await assert.rejects(profile(googleClaims({ exp: 1 })), /expired/)
   await assert.rejects(profile(googleClaims({ iss: 'https://evil.test' })), /unexpected issuer/)

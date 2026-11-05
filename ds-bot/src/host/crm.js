@@ -50,7 +50,8 @@ export function crmSettings(config = {}, env = process.env) {
   return {
     apiUrl: String(crm.apiUrl ?? env.ATENEA_CRM_API_URL ?? DEFAULT_API).replace(/\/+$/, ''),
     // SLA's customer accounts of the CRM; accounts of other products are not the CRM's.
-    sourceSystem: crm.sourceSystem ?? env.ATENEA_CRM_SOURCE_SYSTEM ?? 'ateneai',
+    // SLA records the CRM (Sales OS) accounts under the source system "sales-os".
+    sourceSystem: crm.sourceSystem ?? env.ATENEA_CRM_SOURCE_SYSTEM ?? 'sales-os',
     userPoolId,
     clientId: crm.clientId ?? env.PUBLIC_AWS_COGNITO_USER_POOL_CLIENT_ID,
     // A pool id starts with its region (`<region>_<id>`).

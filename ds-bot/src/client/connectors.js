@@ -1,6 +1,7 @@
 import { createElement as h, useRef, useState } from 'react'
 import { useMorph } from './motion.js'
 import { MaskedInput } from './secret-card.js'
+import { CrmCard } from './crm-card.js'
 import { t } from './i18n.js'
 
 export const GitHubMark = () => h('svg', { width: 20, height: 20, viewBox: '0 0 16 16', fill: 'currentColor', 'aria-hidden': true },
@@ -113,11 +114,15 @@ function ConnectorRow({ connector, actions }) {
     error ? h('div', { className: 'bt-connector-error', role: 'alert' }, error) : null)
 }
 
-// Settings → Connectors: one row per connector.
+// Settings → Connectors: one row per connector. On a shared server every staff member
+// has a CRM card of their own; the team's connectors are for superadmins.
 export function ConnectorsPage({ roster, actions }) {
   const list = roster?.connectors ?? []
-  return h('section', { className: 'bt-set-section' },
+  const shared = roster?.multiuser === true
+  const team = h('section', { key: 'team', className: 'bt-set-section' },
     h('div', { className: 'bt-set-card bt-connectors-card' }, list.length === 0
       ? h('div', { className: 'bt-set-row' }, h('span', { className: 'bt-set-hint' }, t('No connectors')))
       : list.map(connector => h(ConnectorRow, { key: connector.id, connector, actions }))))
+  if (!shared) return team
+  return [h(CrmCard, { key: 'crm', actions }), roster.viewer?.superadmin === true ? team : null]
 }

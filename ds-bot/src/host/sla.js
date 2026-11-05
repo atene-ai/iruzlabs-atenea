@@ -29,7 +29,8 @@ export function install(rt) {
     if (!response.ok) {
       const detail = await response.json().catch(() => ({}))
       const said = typeof detail?.message === 'string' ? detail.message : typeof detail?.error === 'string' ? detail.error : ''
-      throw refused(`SLA answered ${response.status}${said ? `: ${said.slice(0, MESSAGE_MAX)}` : ''}`)
+      // `status` and `reason` (SLA's error code) let a caller say what to do about it.
+      throw Object.assign(refused(`SLA answered ${response.status}${said ? `: ${said.slice(0, MESSAGE_MAX)}` : ''}`), { status: response.status, reason: said.slice(0, MESSAGE_MAX) })
     }
     if (response.status === 204) return undefined
     return response.json().catch(() => undefined)
@@ -42,6 +43,10 @@ export function install(rt) {
     putShare: (botId, share) => request('PUT', `${agentPath(botId)}/shares`, share),
     deleteShare: (botId, staffUserId) => request('DELETE', `${agentPath(botId)}/shares/${encodeURIComponent(staffUserId)}`),
     searchStaff: q => request('GET', `api/atenea/staff?${new URLSearchParams({ q })}`),
+    // The person's products and customer accounts with their level, and a short grant
+    // to act in one account in the CRM (crm.js).
+    me: () => request('GET', 'api/atenea/me'),
+    grant: ({ productAccountId, mode, reason }) => request('POST', 'api/atenea/grants', { productAccountId, mode, reason }),
     // Never blocks or fails the action it records: a lost audit line is only logged.
     audit(entry) {
       void request('POST', 'api/atenea/audit', entry)

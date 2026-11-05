@@ -13,7 +13,7 @@ import { basename, dirname, isAbsolute, join, resolve } from 'node:path'
 import { setTimeout as sleep } from 'node:timers/promises'
 import { fileURLToPath } from 'node:url'
 import { canonicalExecPath } from './canonical-path.mjs'
-import { configureIdentity, PRODUCT_NAME } from './legacy.mjs'
+import { ARTIFACT_PREFIX, configureIdentity, PRODUCT_NAME } from './legacy.mjs'
 import { hostPort } from './host-port.mjs'
 import { captureStdio, LogFile } from './logs.mjs'
 import { currentRootOf, driveOf, formatBytes, freeSpace, isEmptyTree, pickFrom, placeOf, rootOf } from './place.mjs'
@@ -840,7 +840,7 @@ function startUpdates() {
     const debArch = { x64: 'amd64', arm64: 'arm64' }[process.arch] ?? process.arch
     return watchReleases({
       current: app.getVersion(), arch: process.arch, feed, ask: throwaway ? undefined : (version) => downloadPrompt.prompt(version), open: url => electronShell.openExternal(url),
-      asset: version => `DS-Bot-${version}-linux-${debArch}.deb`,
+      asset: version => `${ARTIFACT_PREFIX}-${version}-linux-${debArch}.deb`,
     })
   }
   if (process.platform === 'win32' || process.platform === 'linux') {

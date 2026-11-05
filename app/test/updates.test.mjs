@@ -45,7 +45,7 @@ const release = (version, options = {}) => {
     html_url: options.page ?? `https://github.com/Fei2411/DS-Bot/releases/tag/v${version}`,
     draft: options.draft ?? false,
     prerelease: options.prerelease ?? false,
-    assets: options.assets ?? [{ name: `DS-Bot-${version}-mac-${arch}.zip` }],
+    assets: options.assets ?? [{ name: `Atenea-${version}-mac-${arch}.zip` }],
   }
 }
 
@@ -221,7 +221,7 @@ describe('watchReleases', () => {
   test('a given asset replaces the mac zip: the deb of a Linux install', async (t) => {
     const page = 'https://github.com/Fei2411/DS-Bot/releases/tag/v0.1.9'
     // The deb's file name uses the Debian architecture (x64 → amd64).
-    const deb = version => `DS-Bot-${version}-linux-amd64.deb`
+    const deb = version => `Atenea-${version}-linux-amd64.deb`
     // A release with only the mac zip does not count for a deb install.
     const misses = watchReleases({
       current: '0.1.7', arch: 'x64', asset: deb,
@@ -232,7 +232,7 @@ describe('watchReleases', () => {
 
     const hits = watchReleases({
       current: '0.1.7', arch: 'x64', asset: deb,
-      fetch: async () => releaseResponse([release('0.1.9', { page, assets: [{ name: 'DS-Bot-0.1.9-linux-amd64.deb' }] })]),
+      fetch: async () => releaseResponse([release('0.1.9', { page, assets: [{ name: 'Atenea-0.1.9-linux-amd64.deb' }] })]),
       log: quietLog(),
     })
     t.after(hits.stop)

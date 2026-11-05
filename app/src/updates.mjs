@@ -1,6 +1,7 @@
 // Windows and a Linux AppImage download and install updates; macOS and a Linux deb ask before
 // opening the release page. main.mjs asks the questions, in the dialog.update.* copy of
 // start/text.mjs.
+import { ARTIFACT_PREFIX } from './legacy.mjs'
 
 const CHECK_EVERY_MS = 4 * 60 * 60_000
 export const RELEASES_URL = 'https://api.github.com/repos/atene-ai/iruzlabs-atenea/releases?per_page=20'
@@ -78,7 +79,7 @@ function stateHolder(log) {
 // `asset` names the release asset of this install (default: the macOS zip); a release without
 // it does not count.
 export function watchReleases({ current, arch, fetch = globalThis.fetch, ask, open, feed = RELEASES_URL, log = console, asset }) {
-  const assetName = asset ?? (version => `DS-Bot-${version}-mac-${arch}.zip`)
+  const assetName = asset ?? (version => `${ARTIFACT_PREFIX}-${version}-mac-${arch}.zip`)
   let asked
   let latest = Promise.resolve(null)
   const holder = stateHolder(log)

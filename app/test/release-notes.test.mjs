@@ -15,20 +15,20 @@ const names = version => PACKAGES.map(entry => packageName(version, entry))
 const MB = 1024 ** 2
 
 test('the packages carry the names electron-builder gives them, and copies drop the version', () => {
-  assert.match(read('../electron-builder.yml'), /^artifactName: DS-Bot-\$\{version\}-\$\{os\}-\$\{arch\}\.\$\{ext\}$/mu)
+  assert.match(read('../electron-builder.yml'), /^artifactName: Atenea-\$\{version\}-\$\{os\}-\$\{arch\}\.\$\{ext\}$/mu)
   assert.deepEqual(names('0.2.3'), [
-    'DS-Bot-0.2.3-win-x64.exe',
-    'DS-Bot-0.2.3-mac-arm64.zip',
-    'DS-Bot-0.2.3-mac-x64.zip',
-    'DS-Bot-0.2.3-linux-x86_64.AppImage',
-    'DS-Bot-0.2.3-linux-amd64.deb',
+    'Atenea-0.2.3-win-x64.exe',
+    'Atenea-0.2.3-mac-arm64.zip',
+    'Atenea-0.2.3-mac-x64.zip',
+    'Atenea-0.2.3-linux-x86_64.AppImage',
+    'Atenea-0.2.3-linux-amd64.deb',
   ])
   assert.deepEqual(PACKAGES.map(copyName), [
-    'DS-Bot-win-x64.exe',
-    'DS-Bot-mac-arm64.zip',
-    'DS-Bot-mac-x64.zip',
-    'DS-Bot-linux-x86_64.AppImage',
-    'DS-Bot-linux-amd64.deb',
+    'Atenea-win-x64.exe',
+    'Atenea-mac-arm64.zip',
+    'Atenea-mac-x64.zip',
+    'Atenea-linux-x86_64.AppImage',
+    'Atenea-linux-amd64.deb',
   ])
 })
 
@@ -42,22 +42,22 @@ test('the table lists Windows first, then macOS and Linux, and says which files 
   const block = downloadBlock({ version: '0.2.3', sizes })
   const rows = block.split('\n').filter(line => line.startsWith('| ') && !line.startsWith('| System'))
   assert.equal(rows.length, 5)
-  assert.match(rows[0], /^\| \*\*Windows 10\/11 \(64-bit \/ 64 位\)\*\*<br>Double-click to install \/ 双击安装 \| \[DS-Bot-0\.2\.3-win-x64\.exe\]\(https:\/\/github\.com\/Fei2411\/DS-Bot\/releases\/download\/v0\.2\.3\/DS-Bot-0\.2\.3-win-x64\.exe\) \| 100 MB \|$/u)
+  assert.match(rows[0], /^\| \*\*Windows 10\/11 \(64-bit \/ 64 位\)\*\*<br>Double-click to install \/ 双击安装 \| \[Atenea-0\.2\.3-win-x64\.exe\]\(https:\/\/github\.com\/atene-ai\/iruzlabs-atenea\/releases\/download\/v0\.2\.3\/Atenea-0\.2\.3-win-x64\.exe\) \| 100 MB \|$/u)
   assert.match(rows[1], /^\| macOS, Apple chip .*mac-arm64\.zip.*\| 200 MB \|$/u)
   assert.match(rows[2], /^\| macOS, Intel .*mac-x64\.zip.*\| 300 MB \|$/u)
   assert.match(rows[3], /^\| Linux, AppImage .*linux-x86_64\.AppImage.*\| 400 MB \|$/u)
   assert.match(rows[4], /^\| Linux, deb .*linux-amd64\.deb.*\| 500 MB \|$/u)
   assert.match(block, /^## Download \/ 下载$/mu)
   assert.match(block, /The `\.blockmap`, `latest\*\.yml` and `ds-bot-\*\.tgz` files and the source code archives are for updates and the plugin/u)
-  assert.match(block, /\[SHA256SUMS\.txt\]\(https:\/\/github\.com\/Fei2411\/DS-Bot\/releases\/download\/v0\.2\.3\/SHA256SUMS\.txt\)/u)
+  assert.match(block, /\[SHA256SUMS\.txt\]\(https:\/\/github\.com\/atene-ai\/iruzlabs-atenea\/releases\/download\/v0\.2\.3\/SHA256SUMS\.txt\)/u)
   assert.doesNotMatch(block, /Mirror/u)
 })
 
 test('a mirror comes before GitHub, and a fork links to its own releases', () => {
   const sizes = Object.fromEntries(names('0.2.3').map(name => [name, MB]))
   const block = downloadBlock({ version: '0.2.3', sizes, repo: 'someone/DS-Bot', mirror: 'https://mirror.example/ds-bot/v0.2.3/' })
-  assert.match(block, /\| DS-Bot-0\.2\.3-win-x64\.exe: \[Mirror \/ 国内镜像\]\(https:\/\/mirror\.example\/ds-bot\/v0\.2\.3\/DS-Bot-0\.2\.3-win-x64\.exe\) · \[GitHub\]\(https:\/\/github\.com\/someone\/DS-Bot\/releases\/download\/v0\.2\.3\/DS-Bot-0\.2\.3-win-x64\.exe\) \|/u)
-  assert.doesNotMatch(block, /Fei2411/u)
+  assert.match(block, /\| Atenea-0\.2\.3-win-x64\.exe: \[Mirror \/ 国内镜像\]\(https:\/\/mirror\.example\/ds-bot\/v0\.2\.3\/Atenea-0\.2\.3-win-x64\.exe\) · \[GitHub\]\(https:\/\/github\.com\/someone\/DS-Bot\/releases\/download\/v0\.2\.3\/Atenea-0\.2\.3-win-x64\.exe\) \|/u)
+  assert.doesNotMatch(block, /atene-ai/u)
 })
 
 test('SHA256SUMS.txt lists each package under both of its names, in the format sha256sum checks', () => {
@@ -65,15 +65,15 @@ test('SHA256SUMS.txt lists each package under both of its names, in the format s
   const lines = checksums('0.2.3', hashes).split('\n')
   assert.equal(lines.pop(), '')
   assert.equal(lines.length, 10)
-  assert.equal(lines[0], `${'0'.repeat(64)}  DS-Bot-0.2.3-win-x64.exe`)
-  assert.equal(lines[1], `${'0'.repeat(64)}  DS-Bot-win-x64.exe`)
-  assert.equal(lines[9], `${'4'.repeat(64)}  DS-Bot-linux-amd64.deb`)
+  assert.equal(lines[0], `${'0'.repeat(64)}  Atenea-0.2.3-win-x64.exe`)
+  assert.equal(lines[1], `${'0'.repeat(64)}  Atenea-win-x64.exe`)
+  assert.equal(lines[9], `${'4'.repeat(64)}  Atenea-linux-amd64.deb`)
 })
 
 test('a missing package is named; other files in the folder do not count', () => {
-  const present = ['DS-Bot-0.2.3-win-x64.exe', 'DS-Bot-0.2.3-win-x64.exe.blockmap', 'DS-Bot-mac-arm64.zip', 'DS-Bot-0.2.2-mac-x64.zip',
-    'DS-Bot-0.2.3-linux-x86_64.AppImage', 'DS-Bot-0.2.3-linux-amd64.deb', 'latest.yml']
-  assert.deepEqual(missingPackages('0.2.3', present), ['DS-Bot-0.2.3-mac-arm64.zip', 'DS-Bot-0.2.3-mac-x64.zip'])
+  const present = ['Atenea-0.2.3-win-x64.exe', 'Atenea-0.2.3-win-x64.exe.blockmap', 'Atenea-mac-arm64.zip', 'Atenea-0.2.2-mac-x64.zip',
+    'Atenea-0.2.3-linux-x86_64.AppImage', 'Atenea-0.2.3-linux-amd64.deb', 'latest.yml']
+  assert.deepEqual(missingPackages('0.2.3', present), ['Atenea-0.2.3-mac-arm64.zip', 'Atenea-0.2.3-mac-x64.zip'])
   assert.deepEqual(missingPackages('0.2.3', names('0.2.3')), [])
 })
 
@@ -97,14 +97,14 @@ test('the script hashes and copies the packages and prints the notes', (t) => {
   const to = join(work, 'attach')
   mkdirSync(from)
   for (const name of names('0.2.3')) writeFileSync(join(from, name), `package ${name}`)
-  writeFileSync(join(from, 'DS-Bot-0.2.3-win-x64.exe.blockmap'), 'map')
+  writeFileSync(join(from, 'Atenea-0.2.3-win-x64.exe.blockmap'), 'map')
   writeFileSync(join(work, 'notes.md'), '- Fixed it\n')
   const env = { ...process.env, GITHUB_REPOSITORY: '', MIRROR_BASE: '' }
   const run = spawnSync(process.execPath, [script, '0.2.3', from, to, join(work, 'notes.md')], { encoding: 'utf8', env })
   assert.equal(run.status, 0, run.stderr)
   assert.ok(run.stdout.startsWith('<!-- downloads -->\n## Download / 下载\n'))
   assert.ok(run.stdout.endsWith('<!-- /downloads -->\n\n- Fixed it\n'))
-  assert.match(run.stdout, /\/Fei2411\/DS-Bot\/releases\/download\/v0\.2\.3\/DS-Bot-0\.2\.3-win-x64\.exe/u)
+  assert.match(run.stdout, /\/atene-ai\/iruzlabs-atenea\/releases\/download\/v0\.2\.3\/Atenea-0\.2\.3-win-x64\.exe/u)
   assert.deepEqual(readdirSync(to).sort(), [...PACKAGES.map(copyName), 'SHA256SUMS.txt'].sort())
   const sums = readFileSync(join(to, 'SHA256SUMS.txt'), 'utf8')
   for (const entry of PACKAGES) {
@@ -121,7 +121,7 @@ test('the script stops when a package is missing, so the release is not marked L
   for (const name of names('0.2.3').slice(1)) writeFileSync(join(work, name), name)
   const run = spawnSync(process.execPath, [script, '0.2.3', work, join(work, 'attach')], { encoding: 'utf8' })
   assert.equal(run.status, 1)
-  assert.match(run.stderr, /has no DS-Bot-0\.2\.3-win-x64\.exe$/mu)
+  assert.match(run.stderr, /has no Atenea-0\.2\.3-win-x64\.exe$/mu)
 })
 
 // A releases/latest link must never reach a release whose files are still being attached.

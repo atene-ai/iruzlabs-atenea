@@ -269,7 +269,7 @@ export async function signIn(env, { claims = {}, returnTo } = {}) {
     path: `/auth/callback?code=${code}&state=${encodeURIComponent(authorize.searchParams.get('state'))}`,
     headers: { cookie: loginCookie },
   })
-  const session = cookieOf(callback, 'atenea_session')
+  const session = cookieOf(callback, '__Host-atenea_session')
   return { callback, cookie: session ? cookiePair(session) : undefined }
 }
 

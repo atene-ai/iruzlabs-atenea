@@ -26,7 +26,7 @@ it, once, within ten minutes. `/auth/callback` redeems the code, verifies the ID
 session, revokes the refresh token and leaves through Cognito's `/logout`.
 
 **Sessions.** In memory, behind the signed (HMAC-SHA256), `HttpOnly`, `Secure`,
-`SameSite=Lax` cookie `atenea_session`. The id rotates every 15 minutes (the old id works
+`SameSite=Lax` cookie `__Host-atenea_session`. The id rotates every 15 minutes (the old id works
 for one more minute, for requests already in flight). A session ends after 12 hours
 without requests or 7 days after sign-in, whichever comes first. The signing key is made
 at start, so a gateway restart signs everyone out; Cognito's own session makes signing in

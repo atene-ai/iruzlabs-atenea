@@ -19,7 +19,7 @@ Iruz Labs 的员工要通过公司 VPN 共用一台 Atenea 服务器（`dsh web`
 
 - 登录用员工 Cognito 用户池（`Zuri-Staff-prod`，`mx-central-1`）的 Hosted UI：授权码 + PKCE（S256），带 `state` 和 `nonce`。`state` 同时放在 `__Host-atenea_login` cookie 里，回调只能在发起登录的浏览器里、10 分钟内完成一次。
 - ID 令牌必须是用户池的 RS256 签名（未知 `kid` 时重新拉取 JWKS），`iss`、`aud`、`token_use=id`、`exp`、`email_verified`、`nonce` 都要对。
-- 会话存在网关内存里，浏览器只拿签名的 `atenea_session` cookie（HttpOnly、Secure、SameSite=Lax）。会话 id 每 15 分钟轮换，旧 id 再有效 1 分钟；12 小时没有请求或登录 7 天后结束。网关重启后所有人重新登录。
+- 会话存在网关内存里，浏览器只拿签名的 `__Host-atenea_session` cookie（HttpOnly、Secure、SameSite=Lax）。会话 id 每 15 分钟轮换，旧 id 再有效 1 分钟；12 小时没有请求或登录 7 天后结束。网关重启后所有人重新登录。
 - ID 令牌剩不到 5 分钟时用刷新令牌换新的；Cognito 拒绝刷新令牌就结束会话。退出时撤销刷新令牌并经 Cognito `/logout` 离开。
 
 ### 权限

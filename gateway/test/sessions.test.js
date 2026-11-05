@@ -15,7 +15,7 @@ test('the cookie is signed, httpOnly, Secure and SameSite=Lax for the absolute l
   const { store } = setup()
   const session = store.create({ user: 'ana' })
   const cookie = store.cookie(session)
-  assert.match(cookie, /^atenea_session=[\w-]+\.[\w-]+; Path=\/; HttpOnly; Secure; SameSite=Lax; Max-Age=604800$/)
+  assert.match(cookie, /^__Host-atenea_session=[\w-]+\.[\w-]+; Path=\/; HttpOnly; Secure; SameSite=Lax; Max-Age=604800$/)
   assert.equal(store.find(valueOf(cookie)), session)
 })
 

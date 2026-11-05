@@ -10,7 +10,7 @@ const decode = token => JSON.parse(Buffer.from(token.split('.')[1], 'base64url')
 test('the browser\'s credentials and identity claims never reach dsh', () => {
   const headers = upstreamHeaders({
     host: 'ia.example.test',
-    cookie: 'atenea_session=abc; dsh-auth-x=planted',
+    cookie: '__Host-atenea_session=abc; dsh-auth-x=planted',
     authorization: 'Basic planted',
     origin: 'https://ia.example.test',
     'x-atenea-identity': 'forged',

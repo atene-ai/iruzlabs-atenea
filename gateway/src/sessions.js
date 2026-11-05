@@ -3,7 +3,8 @@
 import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto'
 import { serializeCookie, clearCookie } from './cookies.js'
 
-export const SESSION_COOKIE = 'atenea_session'
+// __Host-: Secure, Path=/ and no Domain, so no other *.iruzlabs.com site can plant or shadow it.
+export const SESSION_COOKIE = '__Host-atenea_session'
 export const IDLE_MS = 12 * 3_600_000
 export const ABSOLUTE_MS = 7 * 24 * 3_600_000
 export const ROTATE_MS = 15 * 60_000

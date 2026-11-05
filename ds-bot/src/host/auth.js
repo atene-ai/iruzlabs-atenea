@@ -231,7 +231,18 @@ export function install(rt) {
     return user
   }
 
-  const authView = () => ({
+  // On a shared server (identity.js) the gateway signs everyone in; this host keeps no
+  // sign-in of its own, so its gate and its saved user are off.
+  const authView = () => (rt.multiuser ? {
+    required: false,
+    multiuser: true,
+    user: rt.viewer?.() === undefined ? null : { name: rt.viewer().name, email: rt.viewer().email, avatar: null, provider: 'atenea' },
+    domains: settings.domains,
+    providers: [],
+    googleConfigured: false,
+    microsoftConfigured: false,
+    devLogin: false,
+  } : {
     required: settings.required,
     user: currentUser(),
     domains: settings.domains,
@@ -241,7 +252,7 @@ export function install(rt) {
     devLogin: settings.devLogin,
   })
 
-  const authLocked = () => settings.required && currentUser() === null
+  const authLocked = () => !rt.multiuser && settings.required && currentUser() === null
 
   let waiting = []
   const whenSignedIn = () => (authLocked() ? new Promise(resolve => waiting.push(resolve)) : Promise.resolve())
@@ -332,7 +343,10 @@ export function install(rt) {
     },
   }
 
-  const authEndpoint = (endpoint, body) => endpoints[endpoint](body ?? {})
+  const authEndpoint = (endpoint, body) => {
+    if (rt.multiuser && endpoint !== 'auth-view') throw Object.assign(new Error('Sign-in is handled by the Atenea server'), { code: 'bot/forbidden' })
+    return endpoints[endpoint](body ?? {})
+  }
 
   rt.ctx?.effect?.(() => () => closeFlow(), 'ds-bot: auth')
 

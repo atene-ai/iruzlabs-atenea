@@ -3,7 +3,19 @@ import { markNoted, noteClientError } from './diagnostics.js'
 
 const ROUTE = 'api/bot'
 // Refusals carry a message meant for the user, who sees it where they acted.
-const REFUSALS = new Set(['bot/refused', 'bot/invalid', 'bot/read-only', 'bot/not-found', 'bot/browser-off'])
+const REFUSALS = new Set(['bot/refused', 'bot/invalid', 'bot/read-only', 'bot/not-found', 'bot/browser-off', 'bot/forbidden', 'bot/auth-required'])
+
+// A shared server answers a request without a valid identity with 401 and a JSON
+// refusal; any other failed answer has no body worth reading.
+const refusalOf = async (response) => {
+  try {
+    const body = await response.json()
+    const error = body?.error
+    return typeof error?.code === 'string' && typeof error?.message === 'string' ? error : undefined
+  } catch {
+    return undefined
+  }
+}
 
 export const call = async (endpoint, payload, signal) => {
   let response
@@ -23,6 +35,8 @@ export const call = async (endpoint, payload, signal) => {
     throw markNoted(Object.assign(new Error(t('Could not reach DSH. Check that it is still running.')), { code: 'NETWORK', cause: error }))
   }
   if (!response.ok) {
+    const refusal = await refusalOf(response)
+    if (refusal !== undefined && REFUSALS.has(refusal.code)) throw Object.assign(new Error(hostText(refusal.message)), { code: refusal.code })
     const error = Object.assign(new Error(hostText(`HTTP ${response.status}`)), { code: `HTTP_${response.status}` })
     noteClientError(endpoint, error)
     throw error

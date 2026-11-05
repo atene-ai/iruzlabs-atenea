@@ -38,6 +38,8 @@
 |---|---|
 | [DSH 让步总账](2026-10-13-dsh-concessions.md) | 因 DSH 本身的限制而做的妥协，以及桌面应用之后怎么处理。判断「是 DS Bot 的 bug 还是 DSH 的限制」先看这里 |
 | [角色与权限](2026-10-07-roles-and-permissions.md) | 用户、Main Bot、群管理员、普通 Bot 各能做什么；Bot 的权限预设和群的统一权限 |
+| [多人共用的服务器](2026-11-05-multiuser-agents.md) | `ATENEA_MULTIUSER=1`：网关签发的身份、按 SLA 共享决定谁看到哪个 Bot、reader / editor / owner / superadmin 各能做什么、署名、审计和已知的隔离限制 |
+| [Bot 在 CRM 里干活](2026-11-05-crm-agent-connector.md) | 共享服务器上 Bot 替开启回合的人用 CRM：SLA 的员工授权或自己关联的 CRM 用户（PKCE、封存的 refresh token）；没人发起的回合按所有者的设置；只读拒绝、审计、限流、群发确认 |
 | [隐私 Bot](2026-10-27-private-bots.md) | 只有用户能开关；其他 Bot 读不到它的文件夹、记忆和会话，外发由用户批准；独立文件夹、删除后的保护和隔离边界 |
 | [群聊](2026-10-07-group-chat.md) | 谁来回答、按顺序发言、@ 提及、轮数上限、干活中的进度和迟到的回复、审批 |
 | [群聊 Goal](2026-11-01-group-goal.md) | 管理员先对齐再写 Goal；分阶段派给成员、每阶段带证据验收；每轮带 Goal 账本防跑偏；空闲时自动推进；暂停、纠偏、终止；会话头胶囊和吊舱显示进度与分工 |
@@ -57,4 +59,5 @@
 | [启动页文案](2026-10-29-start-copy.md) | 启动页和壳里系统对话框的字：按页面位置分层，每层一条写法规则；`text.mjs` 一张表、旧键到新键的对照、扫全表的测试 |
 | [手机 App](2026-10-24-mobile-app.md) | iOS 和 Android 远程操控电脑上的 Bot 团队：手机不跑 Agent；扫码配对、端到端加密、电脑只往外连；完整功能，高权限操作要解锁手机 |
 | [Office 文档](2026-10-27-office-documents.md) | Bot 离线处理 .docx/.pptx/.xlsx：应用带的 payload、`office.js` 命令行、office 路由换成带 `office-tools` 的版本 |
+| [Atenea 服务器网关](2026-11-04-atenea-gateway.md) | 员工经 Cognito 登录、SLA 判断能否进入；网关独占 DSH 所有者 cookie、按路径过滤、把签名身份交给 ds-bot；服务器模式关掉终端、插件管理等所有者功能；已知的隔离限制 |
 | [桌面应用连接服务器](2026-11-05-desktop-server-client.md)（英文） | 设了服务器地址时不启动本机引擎：地址的来源和校验（只收 https，用不了就停下）、连不上时的 VPN 卡片和每 5 秒重试、页面去向（本服务器和网关的 Cognito 登录留在窗口，Google、Microsoft 和其他网站去系统浏览器）、没有网关时粘贴访问链接 |

@@ -11,6 +11,7 @@ import { BotCapabilitiesCard } from './capability-settings.js'
 import { AvatarLibraryPanel, avatarImage } from './avatar-library.js'
 import { useMemoryCount } from './memory-panel.js'
 import { SPRING_SHAPE, SPRING_TAP, spring, useGlide } from './motion.js'
+import { SharingCard } from './sharing.js'
 import { t } from './i18n.js'
 
 const capitalize = word => word[0].toUpperCase() + word.slice(1)
@@ -172,6 +173,37 @@ function MemoryCard({ bot, actions }) {
       h('span', { className: 'bt-mem-row-go' }, t('Manage'), h(ChevronRightIcon))))
 }
 
+// On a shared server the cards someone may only read stay in place, every control
+// in them off. Elsewhere, and for whoever may change the Bot, they render as they are.
+function Locked({ locked, children }) {
+  const kids = Array.isArray(children) ? children : [children]
+  return locked ? h('fieldset', { className: 'bt-bs-lock', disabled: true }, ...kids) : h(Fragment, null, ...kids)
+}
+
+// What the signed-in person may do with this Bot. Off a shared server, everything.
+function accessOf(bot, roster) {
+  if (roster.multiuser !== true) return { shared: false, write: true, manage: true, superadmin: true }
+  return { shared: true, write: bot.access?.write === true, manage: bot.access?.manage === true, superadmin: roster.viewer?.superadmin === true }
+}
+
+// A superadmin sees a Bot nobody owns in SLA yet, and may become its owner.
+function ClaimCard({ bot, actions, run }) {
+  return h(Card, { title: t('Not registered') },
+    h('div', { className: 'bt-set-row bt-bs-row' },
+      h('span', { className: 'bt-set-copy' },
+        h('span', { className: 'bt-bs-label' }, t('No owner')),
+        h('span', { className: 'bt-set-hint' }, t('Only superadmins see this agent until it has an owner in SLA.'))),
+      h('button', { type: 'button', className: 'bt-soft bt-soft-sm', onClick: () => run(actions.claimBot(bot.id)) }, t('Register me as owner'))))
+}
+
+function ViewOnlyCard() {
+  return h(Card, null,
+    h('div', { className: 'bt-set-row bt-bs-row', role: 'note' },
+      h('span', { className: 'bt-set-copy' },
+        h('span', { className: 'bt-bs-label' }, t('View only')),
+        h('span', { className: 'bt-set-hint' }, t('You can view this agent. Only its owner and editors can change it.')))))
+}
+
 // A Bot's settings as grouped cards: who it is (avatar, name, label), what it runs on
 // (model), what it does (instructions), its memory and tasks, its Main Bot role, its
 // sidebar place, and copies.
@@ -190,6 +222,7 @@ export function BotSettingsForm({ bot, roster, actions, run }) {
   const inGroup = (roster.rooms ?? []).some(room => room.members?.includes(bot.id))
   const privateHint = t('Other Bots cannot read its folder, memory or chats, and you approve what it shares with them.')
   const privacyHint = bot.private === true ? privateHint : isMainBot ? t('A Main Bot cannot be private.') : inGroup ? t('Leave its group chats before making it private.') : !bot.workDir ? t('Choose a working folder of its own first.') : privateHint
+  const access = accessOf(bot, roster)
   const save = patch => run(actions.updateBot(bot.id, patch))
   const duplicate = () => run(actions.duplicateBot(bot.id).then(copy => actions.openSession(copy.id)))
   const remove = () => { if (confirming) void run(actions.deleteBot(bot.id)); else setConfirming(true) }
@@ -198,13 +231,16 @@ export function BotSettingsForm({ bot, roster, actions, run }) {
   return h('div', { className: 'bt-bs' },
     h('div', { className: 'bt-bs-hero' },
       h('div', { className: 'bt-avatar-anchor' },
-        h('button', { type: 'button', className: 'bt-avatar-trigger', 'aria-label': t('Edit Bot avatar'), 'aria-expanded': editing, onClick: () => setEditing(value => !value) },
+        h('button', { type: 'button', className: 'bt-avatar-trigger', 'aria-label': t('Edit Bot avatar'), 'aria-expanded': editing, disabled: !access.write || undefined, onClick: () => setEditing(value => !value) },
           h(BotMark, { bot, size: 64, live: true }),
           h('span', { className: 'bt-avatar-pencil', 'aria-hidden': true }, h(PencilIcon))),
         editing ? h(AvatarEditor, { bot, actions, run, onClose: closeEditor }) : null),
       h('div', { className: 'bt-bs-who' },
         h('span', { className: 'bt-bs-name' }, bot.name),
         h('span', { className: 'bt-bs-sub' }, [bot.role, isMainBot ? t('Main Bot') : ''].filter(Boolean).join(' · ') || t('Bot')))),
+    access.write ? null : h(ViewOnlyCard),
+    access.shared && access.superadmin && bot.access?.registered === false ? h(ClaimCard, { bot, actions, run }) : null,
+    h(Locked, { locked: !access.write },
     h(Card, { title: t('Profile') },
       h(Row, { label: t('Name') }, h(InlineText, { label: t('Name'), value: bot.name, placeholder: 'Bob', required: true, maxLength: 40, onSave: name => save({ name }) })),
       h(Row, { label: t('Label'), hint: t('Optional. Shown under the name.') }, h(InlineText, { label: t('Label'), value: bot.role, placeholder: t('Research, admin…'), maxLength: 24, onSave: role => save({ role }) }))),
@@ -212,25 +248,26 @@ export function BotSettingsForm({ bot, roster, actions, run }) {
       h('div', { className: 'bt-set-row bt-bs-row' },
         h('span', { className: 'bt-set-copy' }, h('span', { className: 'bt-bs-label' }, t('Model')), h('span', { className: 'bt-set-hint' }, modelHint(bot, roster))),
         h(ModelMenu, { bot, roster, actions, run }))),
-    h(Card, { title: t('Working folder') },
+    access.superadmin ? h(Card, { title: t('Working folder') },
       h('div', { className: 'bt-set-row bt-bs-row' },
         h('span', { className: 'bt-set-copy' }, h('span', { className: 'bt-bs-label' }, t('Folder'))),
-        h(FolderMenu, { value: bot.workDir, actions, run, onPick: workDir => save({ workDir }) }))),
-    h(Card, { title: t('Privacy') },
+        h(FolderMenu, { value: bot.workDir, actions, run, onPick: workDir => save({ workDir }) }))) : null,
+    access.manage ? h(Card, { title: t('Privacy') },
       h(SwitchRow, {
         label: t('Private'),
         hint: privacyHint,
         on: bot.private === true,
         disabled: bot.private !== true && (isMainBot || inGroup || !bot.workDir),
         onChange: value => save({ private: value }),
-      })),
+      })) : null,
     h(Card, { title: t('Instructions') },
       h(Row, { label: t('What this Bot does'), hint: t('Its job on the team. Part of the Bot\'s system prompt.'), stack: true },
         h(InlineText, { label: t('Instructions'), value: bot.instructions, multiline: true, placeholder: t('What this Bot is responsible for…'), onSave: instructions => save({ instructions }) }))),
-    h(BotCapabilitiesCard, { bot, roster, actions, run, Card, SwitchRow }),
+    h(BotCapabilitiesCard, { bot, roster, actions, run, Card, SwitchRow })),
     roster.memory === false ? null : h(MemoryCard, { bot, actions }),
-    h(BotSchedules, { bot, roster, actions }),
-    h(Card, { title: t('Main Bot') },
+    h(Locked, { locked: !access.write }, h(BotSchedules, { bot, roster, actions })),
+    access.shared && access.manage ? h(SharingCard, { key: `share:${bot.id}`, bot, actions, Card }) : null,
+    access.superadmin ? h(Card, { title: t('Main Bot') },
       onlyMain
         ? h('div', { className: 'bt-set-row bt-bs-row' },
             h('span', { className: 'bt-set-copy' },
@@ -243,16 +280,16 @@ export function BotSettingsForm({ bot, roster, actions, run }) {
           on: isMainBot,
           disabled: bot.private === true,
           onChange: on => run(actions.setMain(bot.id, on)),
-        })),
+        })) : null,
     // The Main Bot tile is always first and always shown, like in the context menu.
     isTile ? null : h(Card, { title: t('Sidebar') },
       h(SwitchRow, { label: t('Pin'), hint: t('Kept above the other chats.'), on: bot.pinned === true, onChange: pinned => run(actions.setFlags(bot.id, { pinned })) }),
       isMainBot ? null : h(SwitchRow, { label: t('Hide from sidebar'), hint: t('Search still finds it.'), on: bot.hidden === true, onChange: hidden => run(actions.setFlags(bot.id, { hidden })) })),
-    h(Card, { title: t('Manage') },
-      bot.private === true ? null : h('button', { type: 'button', className: 'bt-set-row bt-bs-row', onClick: duplicate },
+    !access.write && !access.manage ? null : h(Card, { title: t('Manage') },
+      bot.private === true || !access.write ? null : h('button', { type: 'button', className: 'bt-set-row bt-bs-row', onClick: duplicate },
         h('span', { className: 'bt-set-copy' }, h('span', { className: 'bt-bs-label' }, t('Duplicate')), h('span', { className: 'bt-set-hint' }, t('A copy with the same job and model, and fresh memory.'))),
         h('span', { className: 'bt-chevron' }, h(ChevronRightIcon))),
-      isMainBot ? null : h('button', { type: 'button', className: 'bt-set-row bt-bs-row bt-bs-danger', 'data-confirm': confirming || undefined, onClick: remove },
+      isMainBot || !access.manage ? null : h('button', { type: 'button', className: 'bt-set-row bt-bs-row bt-bs-danger', 'data-confirm': confirming || undefined, onClick: remove },
         h('span', { className: 'bt-set-copy' },
           h('span', { className: 'bt-bs-label' }, confirming ? t('Delete {name}?', { name: bot.name }) : t('Delete Bot')),
           h('span', { className: 'bt-set-hint' }, confirming ? t('Click again to delete. Its chats are archived.') : t('Removes the Bot from the team.'))),
@@ -263,6 +300,10 @@ export const BOT_SETTINGS_CSS = `
 .bt-bs{display:flex;flex-direction:column;gap:18px}
 .bt-bs-hero{display:flex;align-items:center;gap:14px;padding:2px 4px}
 .bt-bs-who{display:flex;flex-direction:column;min-width:0;gap:2px}
+.bt-bs-lock{display:flex;flex-direction:column;gap:18px;min-inline-size:0;margin:0;padding:0;border:0}
+.bt-bs-lock:disabled .bt-set-card{opacity:.6}
+.bt-avatar-trigger:disabled{cursor:default}
+.bt-avatar-trigger:disabled .bt-avatar-pencil{display:none}
 .bt-bs-name{font-size:17px;line-height:24px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .bt-bs-sub{font-size:13px;line-height:18px;color:var(--bt-ink-2)}
 .bt-bs .bt-avedit{left:0;transform:none;width:min(284px,calc(100vw - 32px))}

@@ -37,6 +37,14 @@ const MAIN_RULES = [
   '- The team can have more than one Main Bot; list_bots marks them. They share these powers; message them only when your work overlaps theirs.',
 ].join('\n')
 
+// On a shared server (identity.js) several staff members talk to the same Bot. The
+// text is the same for every turn, so the cached prefix stays stable.
+export const SHARED_RULES = [
+  '## Several people share you',
+  '- Several people on the Iruz Labs staff talk to you. In your own chat each of their messages starts with "[From Name]"; in a group chat their lines start with "Name (user):".',
+  '- "The user" in these rules means the person whose message you are answering. Call people by their names, and do not assume two messages come from the same person unless the names match.',
+].join('\n')
+
 export function install(rt) {
   const { ctx } = rt
 
@@ -51,6 +59,7 @@ export function install(rt) {
         bot.instructions ? `\n${bot.instructions}` : '',
         '',
         rt.isMain(self) ? `${MAIN_RULES}\n\n${TEAM_RULES}` : TEAM_RULES,
+        ...(rt.multiuser ? ['', SHARED_RULES] : []),
       ].join('\n')
     }
     const room = rt.roomOf(id)

@@ -452,6 +452,10 @@ const askRequest = ({ name, group = false, numbered, language, text }) => [
 
 // ---------------------------------------------------------------------------
 
+// On a shared server the team memory is changed only by superadmins (access.js); the
+// Bots' own tools keep their rights.
+const TEAM_LOCKED = 'Only a superadmin can change the team memory'
+
 export function install(rt) {
   const { ctx, config, home, state } = rt
 
@@ -1445,6 +1449,7 @@ export function install(rt) {
       const label = panelLabel(panel, scope)
       const next = cleanEntry(change?.text)
       try {
+        if (tag === 'team' && rt.teamMemoryWritable?.() === false) throw new Error(TEAM_LOCKED)
         if (op !== 'add' && target === undefined) throw new Error(`There is no entry ${change?.entry}.`)
         if (op === 'add' || op === 'edit') {
           const problem = entryProblem(next)
@@ -1466,6 +1471,7 @@ export function install(rt) {
   async function memoryForget(body) {
     const panel = panelOf(body)
     const scope = panel.scopes[body.scope] ?? panel.scopes[panel.group ? 'group' : 'own']
+    if (scope === panel.scopes.team && rt.teamMemoryWritable?.() === false) throw new Error(TEAM_LOCKED)
     const topic = body.topic === null || body.topic === undefined ? undefined : cleanTopic(body.topic)
     await removeEntry({ scope, topic, match: String(body.text ?? ''), actor: USER, label: panelLabel(panel, scope) })
     return await memoryView(panelBody(panel))
@@ -1574,6 +1580,7 @@ export function install(rt) {
         throw new Error('That change is not a change that can be restored.')
       }
       if (row.op === 'archive') throw new Error('An archived memory cannot be restored from the change log.')
+      if (row.scope === 'team' && rt.teamMemoryWritable?.() === false) throw new Error(TEAM_LOCKED)
       if (row.op !== 'add' && row.op !== 'remove' && row.op !== 'replace') {
         throw new Error('That change is not a change that can be restored.')
       }

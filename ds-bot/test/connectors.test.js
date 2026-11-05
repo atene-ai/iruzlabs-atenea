@@ -200,6 +200,8 @@ test('connecting Linear mounts stdio MCP server with LINEAR_API_KEY', async (t) 
   assert.equal(mounts[0].config.serverName, 'linear')
   assert.equal(mounts[0].config.transport, 'stdio')
   assert.equal(mounts[0].config.env.LINEAR_API_KEY, 'lin_api_test_key_123')
+  // The pinned server reads only LINEAR_API_TOKEN; without it it exits at once.
+  assert.equal(mounts[0].config.env.LINEAR_API_TOKEN, 'lin_api_test_key_123')
 })
 
 test('signInGrafana checks instance URL and token', async () => {

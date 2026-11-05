@@ -1,0 +1,51 @@
+# Server-only overlay (ATENEA_SERVER_MODE=1): the image behind the Atenea
+# gateway (gateway/), where several staff members share one dsh web owner.
+# The gateway filters plain HTTP routes, but every Remote stream travels inside
+# the single /api/remote.mux WebSocket, which it forwards without reading. The
+# owner-only features with such streams, or with no other place to stop them,
+# are therefore switched off here, by their documented row ids in the
+# dsh-base and dsh-web-app bundle patches. Each host row goes with the browser
+# row that only renders it. gateway/README.md lists what stays reachable.
+#
+# Row ids are those of dsh 0.2.0-rc.2; compare them with the bundle patches
+# when DSH_VERSION changes.
+
+# The browser terminal: a shell in the container (terminal/create, write,
+# follow and retain).
+- id: terminal-controller
+  disabled: true
+- id: ui-sidebar-terminal
+  disabled: true
+
+# Installs, removes and switches bundles and plugin rows of the profile,
+# including npm packages that run as code in the server.
+- id: plugin-manager
+  disabled: true
+- id: ui-plugin-manager
+  disabled: true
+
+# Signs the shared server into one person's DeepSeek platform account.
+- id: account-controller
+  disabled: true
+- id: ui-settings-account
+  disabled: true
+
+# Reads any file the server can read, also outside the workspace (its file
+# reads have no workspace containment), and watches file changes. The file
+# tree, the document preview and the turn's changed-files cards read through
+# it; the cards would otherwise wait for it forever.
+- id: workspace-files
+  disabled: true
+- id: ui-sidebar-files
+  disabled: true
+- id: ui-sidebar-documentpreview
+  disabled: true
+- id: ui-deliverables
+  disabled: true
+
+# Starts editors and file managers on the host's desktop; the container has
+# none, and no browser should start programs on the server.
+- id: open-in-app
+  disabled: true
+- id: ui-open-in-app
+  disabled: true

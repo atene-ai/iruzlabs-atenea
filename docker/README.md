@@ -97,6 +97,70 @@ Alternatives:
 there: API keys and secret values you type cross the LAN in clear text. Put a
 reverse proxy in front for regular use.
 
+## Server mode (Atenea gateway)
+
+For a server several people share, `dsh web`'s single owner cookie is not
+enough: whoever holds it controls the terminal, settings, keys and plugins.
+`ATENEA_SERVER_MODE=1` prepares the image to run behind the
+[Atenea gateway](../gateway/README.md), which signs Iruz Labs staff in with
+Cognito, checks SLA and forwards only what the UI needs. In this mode the
+entrypoint:
+
+- applies [`server.patch.yml`](server.patch.yml) after `docker.patch.yml`. It
+  switches off, by their documented row ids, the browser terminal, the plugin
+  manager, the DeepSeek account sign-in, the workspace file service (with the
+  file tree, document preview and changed-files cards that read through it)
+  and the open-in-app launcher. The gateway's README explains each one and what
+  stays possible;
+- writes dsh's `dsh web: http://…/?token=…` line to `DSH_LAUNCH_URL_FILE`
+  (default `/run/atenea/dsh-launch-url`; the file is 0600 and its directory
+  0700, both owned by `PUID`) instead of the log, which only says
+  `dsh web: ready; launch URL written to …`. The file of the previous start is
+  removed first. The gateway mounts that volume read-only and trades the token
+  for its own cookie; no person needs it.
+
+Any value other than `0` or `1` stops the container. Without the variable the
+image behaves exactly as before.
+
+[`compose.server.yml`](compose.server.yml) runs dsh in server mode and the
+gateway side by side. dsh is not published at all; the gateway reaches it as
+`http://atenea:3080` on the Compose network (hence `DSH_TRUSTED_HOST=atenea`)
+and is published on `127.0.0.1:13081` for the reverse proxy. The gateway
+container is read-only, has no capabilities and runs as `PUID:PGID` so it can
+read the launch file.
+
+```sh
+cd docker
+cp server.env.example server.env   # fill it in; it holds secrets, keep it 0600
+docker compose -f compose.server.yml --env-file server.env up -d --build
+curl -s http://127.0.0.1:13081/healthz   # {"ok":true,"upstream":true,"dshSession":true}
+```
+
+The same with `docker run` (one image of each, built from `docker/Dockerfile`
+and `gateway/`; `atenea.env` holds the model key and `gateway.env` the
+`COGNITO_*`, `SLA_URL` and `PUBLIC_URL` values, both 0600):
+
+```sh
+docker network create atenea
+docker run -d --name atenea --network atenea --network-alias atenea --restart unless-stopped \
+  --env-file atenea.env -e ATENEA_SERVER_MODE=1 -e DSH_TRUSTED_HOST=atenea \
+  -e ATENEA_AUTH_REQUIRED=0 -e DSH_TELEMETRY_DISABLED=1 -e ATENEA_IDENTITY_SECRET \
+  -v /srv/atenea/data:/data -v /srv/atenea/workspace:/workspace -v atenea-launch:/run/atenea \
+  atenea:current
+docker run -d --name atenea-gateway --network atenea --restart unless-stopped \
+  --user 1000:1000 --read-only --cap-drop ALL --security-opt no-new-privileges \
+  -p 127.0.0.1:13081:13081 --env-file gateway.env -e ATENEA_IDENTITY_SECRET \
+  -e DSH_UPSTREAM=http://atenea:3080 -e DSH_LAUNCH_URL_FILE=/run/atenea/dsh-launch-url \
+  -v atenea-launch:/run/atenea:ro \
+  atenea-gateway:current
+```
+
+Point the reverse proxy at the gateway instead of dsh (Caddy:
+`reverse_proxy 127.0.0.1:13081`). It must keep the `Host` header (Caddy does by
+default) and pass WebSocket upgrades. `ATENEA_AUTH_REQUIRED=0` turns off
+ds-bot's own desktop sign-in, whose loopback redirect cannot work on a server;
+the gateway signs people in instead.
+
 ## Environment variables
 
 In the root `docker-compose.yml`, edit container variables under `environment`,
@@ -114,6 +178,8 @@ see `docker/.env.example` for its full list. The main variables are:
 | `DSH_LISTEN_PORT` | Listen port inside the container (default 3080); only relevant with `network_mode: host` |
 | `PUID` / `PGID` | User/group the server runs as and new files belong to |
 | `DSH_TELEMETRY_DISABLED` | `1` turns off dsh's anonymous telemetry |
+| `ATENEA_SERVER_MODE` | `1` for [server mode](#server-mode-atenea-gateway) behind the Atenea gateway; `0` (default) otherwise |
+| `DSH_LAUNCH_URL_FILE` | Server mode only: where the launch URL goes (default `/run/atenea/dsh-launch-url`) |
 
 Extra `dsh` CLI flags can be appended to the container command.
 
@@ -242,3 +308,17 @@ workspace ownership and web startup. All test containers and volumes are
 removed when it finishes.
 CI builds the image from the Linux checkout and runs this test as part of the
 required Test result check.
+
+Server mode has its own test, run by hand after building both images:
+
+```sh
+docker build -f docker/Dockerfile -t ds-bot:local .
+docker build -t atenea-gateway:local gateway
+node docker/test-server.mjs ds-bot:local atenea-gateway:local
+```
+
+It uses an internal Docker network and temporary volumes, and checks that an
+unknown `ATENEA_SERVER_MODE` stops the start, that the launch URL reaches the
+shared volume as a 0600 file and never the log, that the switched-off features
+answer 404 while chat calls still answer, that the gateway takes dsh's owner
+cookie through the volume, and that without server mode nothing changes.

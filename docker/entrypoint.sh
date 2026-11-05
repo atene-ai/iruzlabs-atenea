@@ -38,6 +38,14 @@ esac
 case "$LISTEN_PORT" in
   ''|*[!0-9]*) echo "entrypoint: DSH_LISTEN_PORT must be a port number (got '$LISTEN_PORT')" >&2; exit 1 ;;
 esac
+# Server mode is the image behind the Atenea gateway (gateway/README.md). A typo must not
+# leave the owner-only features of server.patch.yml switched on, so other values stop here.
+SERVER_MODE=${ATENEA_SERVER_MODE:-0}
+case "$SERVER_MODE" in
+  0) SERVER_PATCH= ;;
+  1) SERVER_PATCH=/opt/ds-bot/server.patch.yml ;;
+  *) echo "entrypoint: ATENEA_SERVER_MODE must be 0 or 1 (got '$SERVER_MODE')" >&2; exit 1 ;;
+esac
 
 # The webserver row's whole config is replaced by a patch, so its bundle values
 # (compression on this dsh release) are restated literally.
@@ -54,6 +62,7 @@ EOF
 # --patch is a dsh option and must precede the app's own flags.
 set -- dsh --profile web \
   --patch /opt/ds-bot/docker.patch.yml --patch /tmp/listen.patch.yml \
+  ${SERVER_PATCH:+--patch "$SERVER_PATCH"} \
   --no-open "$@"
 
 if [ -n "${DSH_TRUSTED_HOST:-}" ]; then
@@ -66,4 +75,38 @@ if [ -n "${DSH_TRUSTED_HOST:-}" ]; then
 fi
 export HOME=/home/node
 cd /workspace
-exec gosu node "$@"
+if [ "$SERVER_MODE" = 0 ]; then
+  exec gosu node "$@"
+fi
+
+# Server mode: the gateway trades dsh's launch token for its own owner cookie, so the
+# `dsh web:` line goes to a 0600 file in a volume only the gateway also mounts, and the log
+# says only that it was written. dsh stays PID 1; its stdout passes through a FIFO that a
+# reader copies to the log line by line.
+LAUNCH_FILE=${DSH_LAUNCH_URL_FILE:-/run/atenea/dsh-launch-url}
+LAUNCH_DIR=$(dirname "$LAUNCH_FILE")
+mkdir -p "$LAUNCH_DIR"
+chown node:node "$LAUNCH_DIR"
+chmod 0700 "$LAUNCH_DIR"
+# A file left by the previous start names a token that no longer opens anything.
+rm -f "$LAUNCH_FILE"
+FIFO=$(mktemp -u /tmp/dsh-stdout.XXXXXX)
+mkfifo -m 0600 "$FIFO"
+chown node:node "$FIFO"
+(
+  # Opening waits for dsh to open the writing end; the name is not needed after that.
+  exec 3<"$FIFO"
+  rm -f "$FIFO"
+  umask 077
+  while IFS= read -r line <&3 || [ -n "$line" ]; do
+    case $line in
+      'dsh web: http'*)
+        printf '%s\n' "$line" > "$LAUNCH_FILE.tmp"
+        chown node:node "$LAUNCH_FILE.tmp"
+        mv -f "$LAUNCH_FILE.tmp" "$LAUNCH_FILE"
+        echo "dsh web: ready; launch URL written to $LAUNCH_FILE" ;;
+      *) printf '%s\n' "$line" ;;
+    esac
+  done
+) &
+exec gosu node "$@" >"$FIFO"

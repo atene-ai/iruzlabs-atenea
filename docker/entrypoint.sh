@@ -90,13 +90,16 @@ chown node:node "$LAUNCH_DIR"
 chmod 0700 "$LAUNCH_DIR"
 # A file left by the previous start names a token that no longer opens anything.
 rm -f "$LAUNCH_FILE"
-FIFO=$(mktemp -u /tmp/dsh-stdout.XXXXXX)
+# The FIFO stays root's, in a private directory: root opens both ends and dsh inherits the
+# writing one. Hosts with fs.protected_fifos (Ubuntu's default) refuse even root an O_CREAT
+# open of a FIFO someone else owns in a sticky directory such as /tmp.
+FIFO_DIR=$(mktemp -d /tmp/dsh-stdout.XXXXXX)
+FIFO=$FIFO_DIR/stdout
 mkfifo -m 0600 "$FIFO"
-chown node:node "$FIFO"
 (
   # Opening waits for dsh to open the writing end; the name is not needed after that.
   exec 3<"$FIFO"
-  rm -f "$FIFO"
+  rm -rf "$FIFO_DIR"
   umask 077
   while IFS= read -r line <&3 || [ -n "$line" ]; do
     case $line in

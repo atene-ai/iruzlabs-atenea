@@ -40,6 +40,14 @@ export const state = {
   cookies: [],
   paths: {},
   dock: { setIcon: () => {} },
+  // Server mode: what the network answers (net.request) — { status } or { error } — and the
+  // requests it got; where the server redirects a page (the next address, or none), and the
+  // HTTP status of the page a load ends on, which did-navigate reports.
+  netAnswer: undefined,
+  netRequests: [],
+  redirectOf: undefined,
+  pageStatus: undefined,
+  permissions: {},
 }
 
 export class FakeWindow extends EventEmitter {
@@ -80,7 +88,7 @@ export class FakeWindow extends EventEmitter {
   getNormalBounds() { return this.getBounds() }
   setBounds() {}
   setContentBounds() {}
-  setBackgroundColor() {}
+  setBackgroundColor(color) { this.background = color }
   setSkipTaskbar() {}
   isFocused() { return false }
   showInactive() { this.visible = true; this.shown += 1; this.emit('show') }
@@ -91,6 +99,23 @@ export class FakeWindow extends EventEmitter {
     this.url = url
     this.loaded.push(url)
     if (state.rejectLoads || this.rejectLoads) throw new Error(`the page ${url} did not load`)
+    // The server's redirects: each hop is offered to will-redirect, and a cancelled one ends the
+    // load the way Chromium does.
+    let at = url
+    for (let hop = 0; hop < 20; hop += 1) {
+      const next = state.redirectOf?.(at)
+      if (next === undefined) break
+      const event = { url: next, isMainFrame: true, defaultPrevented: false, preventDefault() { this.defaultPrevented = true } }
+      this.webContents.emit('will-redirect', event, next, false, true)
+      if (event.defaultPrevented) throw Object.assign(new Error('ERR_FAILED (-2)'), { code: 'ERR_FAILED', errno: -2 })
+      at = next
+    }
+    this.url = at
+    const status = state.pageStatus?.(at)
+    if (status !== undefined) {
+      this.webContents.emit('did-navigate', {}, at, status)
+      this.webContents.emit('did-finish-load')
+    }
     // The Host trades the token of the launch URL for a cookie of the browser's session.
     try {
       const parsed = new URL(url)
@@ -105,6 +130,18 @@ export class FakeWindow extends EventEmitter {
   }
 }
 
+/**
+ * A navigation the page starts itself (a link, a form): will-navigate first, then the load.
+ * @returns {Promise<boolean>} whether the window went
+ */
+FakeWindow.prototype.navigate = async function navigate(url) {
+  const event = { url, isMainFrame: true, defaultPrevented: false, preventDefault() { this.defaultPrevented = true } }
+  this.webContents.emit('will-navigate', event, url)
+  if (event.defaultPrevented) return false
+  await this.loadURL(url).catch(() => {})
+  return true
+}
+
 class FakeWebContents extends EventEmitter {
   constructor(win) {
     super()
@@ -114,7 +151,9 @@ class FakeWebContents extends EventEmitter {
     this.isDestroyed = () => this.win.destroyed
     this.getURL = () => this.win.url
     this.getTitle = () => PRODUCT_NAME
-    this.send = () => {}
+    // The last message on each channel: the start window's state, for one.
+    this.messages = new Map()
+    this.send = (channel, value) => { this.messages.set(channel, value) }
     this.setWindowOpenHandler = () => {}
     this.insertCSS = async () => {}
     this.toggleDevTools = () => {}
@@ -225,8 +264,31 @@ const cookieJar = {
 }
 
 export const session = {
-  defaultSession: Object.assign(new EventEmitter(), { cookies: cookieJar }),
+  defaultSession: Object.assign(new EventEmitter(), {
+    cookies: cookieJar,
+    setPermissionRequestHandler: (handler) => { state.permissions.request = handler },
+    setPermissionCheckHandler: (handler) => { state.permissions.check = handler },
+  }),
   fromPartition: () => Object.assign(new EventEmitter(), { cookies: cookieJar }),
+}
+
+// The network of the main process: each request answers what state.netAnswer says.
+export const net = {
+  request: (options) => {
+    state.netRequests.push(options)
+    const request = new EventEmitter()
+    request.end = () => {
+      setImmediate(() => {
+        if (request.aborted) return
+        const answer = state.netAnswer?.(options) ?? { status: 200 }
+        if (answer.error !== undefined) request.emit('error', new Error(answer.error))
+        else if (answer.status >= 300 && answer.status < 400) request.emit('redirect', answer.status)
+        else request.emit('response', { statusCode: answer.status })
+      })
+    }
+    request.abort = () => { request.aborted = true }
+    return request
+  },
 }
 
 export const ipcMain = {

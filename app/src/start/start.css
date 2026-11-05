@@ -38,7 +38,7 @@ html[data-frame=system] .band{display:none}
 /* stage: everything that moves with the later-start shift */
 .stage{position:absolute;left:calc(50% - 360px);top:0;width:720px;height:100%}
 html[data-frame=system] .stage{top:-24px}
-html:is([data-start=later],[data-start=moving]){--u:.48px}
+html:is([data-start=later],[data-start=moving],[data-start=server]){--u:.48px}
 /* Until a card needs the sheet, the whale, its line and the hint sit 80 px lower, at the
    window's visual centre (an integer translation, so the text stays on whole pixels). */
 html:not([data-up]) .stage{translate:0 80px}
@@ -52,12 +52,12 @@ html:not([data-up]) .stage{translate:0 80px}
 .elapsed{position:absolute;right:calc(50% - 312px);top:54px;width:6.5em;height:18px;text-align:right;white-space:nowrap;font-size:13px;line-height:18px;color:var(--bt-ink-2);font-variant-numeric:tabular-nums;opacity:0;transition:opacity .16s}
 html[data-elapsed] .elapsed{opacity:1;transition:opacity .22s ease-out}
 html[data-frame=system] .elapsed{top:30px}
-html:is([data-start=later],[data-start=moving]) :is(.elapsed,.water,.trace){display:none}
+html:is([data-start=later],[data-start=moving],[data-start=server]) :is(.elapsed,.water,.trace){display:none}
 
 /* lane: the clipped water above the line at y 180 */
 .lane{position:absolute;left:48px;top:76px;width:624px;height:104px;overflow:clip;pointer-events:none}
 .whale-x{position:absolute;left:87px;top:50px;width:66px;height:66px}
-html:is([data-start=later],[data-start=moving]) .whale-x{left:288px;top:63px;width:48px;height:48px}
+html:is([data-start=later],[data-start=moving],[data-start=server]) .whale-x{left:288px;top:63px;width:48px;height:48px}
 .whale-gaze,.whale,.whale-move,.whale-loop{width:100%;height:100%}
 /* .whale-gaze scales only for the breath at rest (whale.js), around the same pivot. */
 .whale-gaze,.whale,.whale-move,.whale-loop{transform-origin:49.95% 79%}
@@ -67,7 +67,7 @@ html:is([data-start=later],[data-start=moving]) .whale-x{left:288px;top:63px;wid
 .bt-eye,#eye-pair,#gaze{transform-box:fill-box;transform-origin:center}
 #gaze{transform:translate(calc(var(--gx,0) * 12%),calc(var(--gy,0) * 11%));transition:transform .18s ease-out}
 .whale-hit{position:absolute;left:calc(var(--hx,168px) - 43.5px);top:107.75px;width:87px;height:64.5px;border-radius:50%}
-html:is([data-start=later],[data-start=moving]) .whale-hit{left:328.5px;top:120.75px;width:63px;height:47.25px}
+html:is([data-start=later],[data-start=moving],[data-start=server]) .whale-hit{left:328.5px;top:120.75px;width:63px;height:47.25px}
 .fx{position:absolute;inset:0;pointer-events:none}
 .ripple{position:absolute;left:calc(var(--rx,177px) - 21px);top:175.5px;width:42px;height:9px;box-sizing:border-box;border:1.5px solid var(--bt-line-2);border-radius:50%;opacity:0}
 
@@ -126,6 +126,10 @@ html[data-shimmer] .voice[data-on]>span{color:transparent;background:linear-grad
 .foot{font-size:13px;line-height:18px;color:var(--bt-ink-2)}
 .card>.foot,.miss{margin-top:8px}
 .miss{font-size:13px;line-height:18px;color:var(--bt-danger)}
+/* server mode: the access link card's field and its button on one row */
+.link-row{display:flex;gap:8px;align-items:center}
+.link-input{flex:1 1 auto;min-width:0;height:36px;box-sizing:border-box;padding:0 12px;border:1px solid var(--bt-line-2);border-radius:10px;background:var(--bt-main);color:var(--bt-ink);font:inherit;font-size:13px}
+.link-input:focus-visible{outline:2px solid var(--bt-accent);outline-offset:1px}
 :is(.miss,.banner,.log,.confirm,.models,.more,[data-u]):not([hidden]){transition:opacity .22s ease-out,filter .22s ease-out}
 @starting-style{:is(.miss,.banner,.log,.confirm,.models,.more,[data-u]):not([hidden]){opacity:0;filter:blur(6px)}}
 /* Opened, the import card's body fits the sheet at 540 px with these gaps; a model list
@@ -188,7 +192,7 @@ html[data-shimmer] .voice[data-on]>span{color:transparent;background:linear-grad
 .note{flex:none;white-space:nowrap}
 .place{flex:0 1 auto;min-width:0;margin:0;display:flex;align-items:baseline;gap:6px;white-space:nowrap}
 .place-text{min-width:0;overflow:hidden;text-overflow:ellipsis}
-html:is([data-start=later],[data-start=moving]) .footrow{display:none}
+html:is([data-start=later],[data-start=moving],[data-start=server]) .footrow{display:none}
 /* A work area under 588 px gets a 500 px window: the stage rises 8 px and the sheet still ends
    above the footer. */
 @media (max-height:520px){.stage{top:-8px}html[data-frame=system] .stage{top:-32px}.sheet{height:calc(100% - 296px)}.elapsed{top:46px}html[data-frame=system] .elapsed{top:22px}}
@@ -208,8 +212,8 @@ html[data-start=first]:not([data-resume],[data-settled],[data-tier=quiet]) .ripp
 html[data-start=first]:not([data-resume],[data-settled]) .voice{animation:bt-veil .22s ease-out .16s backwards}
 html[data-start=first]:not([data-resume],[data-settled]) .water{animation:bt-veil .22s ease-out .22s backwards}
 html[data-start=first]:not([data-resume],[data-settled]) :is(.note,.place){animation:bt-veil .22s ease-out .42s backwards}
-html:is([data-start=later],[data-start=moving]):not([data-resume],[data-entered]) .whale-move{animation:bt-enter-later var(--spring-tap-ms) var(--spring-tap) backwards}
-html:is([data-start=later],[data-start=moving]):not([data-resume],[data-settled]) .voice{animation:bt-veil .22s ease-out .06s backwards}
+html:is([data-start=later],[data-start=moving],[data-start=server]):not([data-resume],[data-entered]) .whale-move{animation:bt-enter-later var(--spring-tap-ms) var(--spring-tap) backwards}
+html:is([data-start=later],[data-start=moving],[data-start=server]):not([data-resume],[data-settled]) .voice{animation:bt-veil .22s ease-out .06s backwards}
 
 /* state loops, keyed on data-whale and data-tail; plugin keyframes (styles.js:84-105) in px via --u */
 html[data-whale=searching] .whale-loop{animation:bt-seek 1s ease-in-out infinite}

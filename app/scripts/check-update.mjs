@@ -121,7 +121,8 @@ try {
   // A terminal inside an Electron-based editor may set ELECTRON_RUN_AS_NODE, which turns the app into plain Node.
   const { ELECTRON_RUN_AS_NODE: _runAsNode, ...env } = process.env
   // Without a corporate sign-in no Bot starts work (ds-bot/src/host/auth.js); this check needs none.
-  Object.assign(env, { DS_BOT_HOME: join(work, 'home'), DS_BOT_SHELL_DATA: join(work, 'shell'), DS_BOT_UPDATE_URL: feed, ATENEA_AUTH_REQUIRED: '0' })
+  // The package's default is the company server; this check runs the app's own engine.
+  Object.assign(env, { DS_BOT_HOME: join(work, 'home'), DS_BOT_SHELL_DATA: join(work, 'shell'), DS_BOT_UPDATE_URL: feed, ATENEA_AUTH_REQUIRED: '0', ATENEA_SERVER_URL: 'local' })
   const port = 9300 + Math.floor(Math.random() * 600)
   app = spawn(resolve(executable), [`--remote-debugging-port=${String(port)}`], { env, stdio: ['ignore', 'pipe', 'pipe'] })
   const exited = new Promise((done) => { app.once('exit', (code) => { done(code) }) })

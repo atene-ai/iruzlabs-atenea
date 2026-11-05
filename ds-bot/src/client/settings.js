@@ -28,6 +28,10 @@ const capitalize = word => word[0].toUpperCase() + word.slice(1)
 // Settings dialog: a 198px page list beside the page. Bots and group chats each list
 // their members, and one opens on its own settings form. Usage widens the dialog.
 // Models is there wherever the host serves the model providers, beside DSH's own settings.
+// Pages that change the whole team (model keys, connectors, the capability library,
+// usage, keys, diagnostics). On a shared server only a superadmin sees them.
+const TEAM_PAGES = new Set(['models', 'connectors', 'capabilities', 'usage', 'secrets', 'feedback'])
+const staffOnly = roster => roster.multiuser === true && roster.viewer?.superadmin !== true
 const SETTINGS_PAGES = [['general', 'General'], ['models', 'Models'], ['bots', 'Bots'], ['groups', 'Group chats'], ['connectors', 'Connectors'], ['capabilities', 'Capabilities'], ['browser', 'Browser'], ['schedules', 'Scheduled tasks'], ['usage', 'Usage'], ['secrets', 'Secrets'], ['feedback', 'Feedback'], ['about', 'About DS Bot']]
 const PAGE_ICONS = { ...SETTINGS_ICONS, models: SlidersIcon, connectors: ConnectorIcon, capabilities: PlugIcon, browser: ConnectorIcon, schedules: ClockIcon, secrets: KeyIcon, feedback: FeedbackIcon, about: InfoIcon }
 
@@ -90,7 +94,7 @@ function GeneralPage({ roster, actions, run }) {
   }
   return [
     h(SetSection, { key: 'look', title: t('Appearance') },
-      h(SetRow, { label: t('Theme'), hint: t('Colors for the whole team, on every device.') },
+      h(SetRow, { label: t('Theme'), hint: roster.multiuser === true ? t('Your colors, on every device.') : t('Colors for the whole team, on every device.') },
         h('select', { className: 'bt-select', 'aria-label': t('Theme'), value: current, onChange: event => run(actions.setPrefs({ theme: event.target.value })) },
           Object.entries(themes).map(([id, theme]) => h('option', { key: id, value: id }, t(theme.label))))),
       h(SetRow, { label: t('Accent'), hint: t('Unread marks, badges, and the brand mark.') },
@@ -107,7 +111,7 @@ function GeneralPage({ roster, actions, run }) {
       layoutOf(prefs) === 'flat' ? h(SetRow, { label: t('Text width') }, h(WidthSlider, { label: t('Text width'), value: flatWidthOf(prefs), save: flatWidth => run(actions.setPrefs({ flatWidth })) })) : null,
       h(SetRow, { label: t('Bubble width') }, h(WidthSlider, { label: t('Bubble width'), value: widthOf(prefs), save: width => run(actions.setPrefs({ width })) })),
       h(SetRow, { label: t('Show thinking') }, h(Switch, { label: t('Show thinking'), on: thinkingShown(prefs), onChange: thinking => run(actions.setPrefs({ thinking })) }))),
-    h(SetSection, { key: 'new', title: t('New Bots') },
+    staffOnly(roster) ? null : h(SetSection, { key: 'new', title: t('New Bots') },
       h(SetRow, { label: t('Default model') },
         h(ModelMenu, {
           bot: { id: 'new-bots', name: t('New Bots'), model: prefs.defaultBotModel },
@@ -118,10 +122,10 @@ function GeneralPage({ roster, actions, run }) {
     h(SetSection, { key: 'input', title: t('Input') },
       h(SetRow, { label: t('Enter sends message') },
         h(Switch, { label: t('Enter sends message'), on: prefs.enterToSend !== false, onChange: enterToSend => run(actions.setPrefs({ enterToSend })) }))),
-    actions.setSurface ? h(SetSection, { key: 'mode', title: t('Mode') },
+    actions.setSurface && !staffOnly(roster) ? h(SetSection, { key: 'mode', title: t('Mode') },
       h(SetRow, { label: t('Classic Agent mode') },
         h('button', { type: 'button', className: 'bt-soft bt-soft-sm', onClick: () => actions.setSurface('agent') }, t('Switch')))) : null,
-    h(LocationsSection, { key: 'places', actions, run }),
+    staffOnly(roster) ? null : h(LocationsSection, { key: 'places', actions, run }),
   ]
 }
 
@@ -251,7 +255,7 @@ export function SettingsDialog({ page, id, roster, actions, useUpdate, leaving =
   // A Bot or group deleted while its form is open leaves its page on the list.
   const bot = page === 'bots' && id ? roster.byId[id] : undefined
   const room = page === 'groups' && id ? roster.roomsById[id] : undefined
-  const pages = SETTINGS_PAGES.filter(([key]) => key !== 'models' || actions.providers !== undefined)
+  const pages = SETTINGS_PAGES.filter(([key]) => (key !== 'models' || actions.providers !== undefined) && !(staffOnly(roster) && TEAM_PAGES.has(key)))
   const shown = pages.some(([key]) => key === page) ? page : 'general'
   const usageFocus = shown === 'usage' && id ? id : null
   const label = t(pages.find(([key]) => key === shown)[1])
@@ -280,7 +284,7 @@ export function SettingsDialog({ page, id, roster, actions, useUpdate, leaving =
         pages.map(([key, text]) => h('button', {
           key, type: 'button', className: 'bt-settings-item', 'aria-current': shown === key ? 'page' : undefined, onClick: () => actions.openSettings(key),
         }, h(PAGE_ICONS[key]), t(text))),
-        actions.openHarnessSettings ? h('button', {
+        actions.openHarnessSettings && !staffOnly(roster) ? h('button', {
           type: 'button', className: 'bt-settings-item bt-settings-shell', title: t('Models, providers, and the rest of DeepSeek Harness'),
           onClick: () => { close(); actions.openHarnessSettings() },
         }, h(SlidersIcon), t('Harness settings')) : null),

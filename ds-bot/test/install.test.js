@@ -82,6 +82,8 @@ test('apply registers listeners and effects in a fixed order', (t) => {
     'on llm/stream',
     'on llm/stream',
     'on agent/status',
+    'on llm/stream',
+    'effect ds-bot: authors',
     'on tools/execute',
     'on llm/stream',
     'effect ds-bot: load secrets',

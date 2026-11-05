@@ -20,6 +20,14 @@ export function install(rt) {
   const encoder = new TextEncoder()
   /** @type {Set<ReadableStreamDefaultController<Uint8Array>>} */
   const clients = new Set()
+  // On a shared server, who each window signed in as (identity.js): it hears only about
+  // the Bots that person may see.
+  /** @type {WeakMap<ReadableStreamDefaultController<Uint8Array>, any>} */
+  const callers = new WeakMap()
+  const hears = (controller, botId) => {
+    const caller = callers.get(controller)
+    return botId === undefined || caller === undefined || rt.runAs(caller, () => rt.access.sees({ botId }))
+  }
   const send = (controller, chunk) => {
     if ((controller.desiredSize ?? 0) < -MAX_QUEUED) {
       leave(controller)
@@ -29,7 +37,7 @@ export function install(rt) {
   }
   const publish = (event, data) => {
     const chunk = encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`)
-    for (const controller of clients) send(controller, chunk)
+    for (const controller of clients) if (hears(controller, data.botId)) send(controller, chunk)
   }
 
   rt.stateSaved = () => {
@@ -87,16 +95,28 @@ export function install(rt) {
     methods: ['GET'],
     requestBody: 'buffered',
     fetch: async (request) => {
+      const caller = rt.multiuser ? rt.identify(request) : undefined
+      if (caller?.error !== undefined) {
+        return new Response(JSON.stringify({ ok: false, error: { code: 'bot/auth-required', message: 'Sign in to Atenea first', details: {} } }), { status: 401, headers: { 'content-type': 'application/json' } })
+      }
       let controller
+      let expiry
       const body = new ReadableStream({
         start(own) {
           controller = own
+          if (caller !== undefined) {
+            callers.set(own, caller)
+            // The identity was checked once, at connect; the window reconnects with a
+            // fresh one, so a share taken back stops reaching it within that lifetime.
+            expiry = setTimeout(() => leave(own), Math.max(0, caller.identity.exp * 1000 - Date.now()))
+            expiry.unref?.()
+          }
           clients.add(own)
           send(own, encoder.encode(`event: hello\ndata: ${JSON.stringify({ revision: state.revision })}\n\n`))
         },
-        cancel() { leave(controller) },
+        cancel() { clearTimeout(expiry); leave(controller) },
       })
-      request.signal.addEventListener('abort', () => leave(controller), { once: true })
+      request.signal.addEventListener('abort', () => { clearTimeout(expiry); leave(controller) }, { once: true })
       return new Response(body, { status: 200, headers: { 'content-type': 'text/event-stream; charset=utf-8', 'cache-control': 'no-store' } })
     },
   }), 'ds-bot: live feed route')

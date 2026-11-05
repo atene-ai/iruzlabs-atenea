@@ -169,6 +169,15 @@ export function teamActions({ call, after, partFor, roster, ui, live, cards, hel
     diagnosticsLog: () => call('diagnostics-log'),
     diagnosticsClear: () => call('diagnostics-clear'),
     repoStars: () => call('repo-stars'),
+    // A shared server: who a Bot is shared with, the staff directory, and who wrote
+    // which message. The staff directory is read through the host, never directly.
+    shares: botId => call('shares', { botId }),
+    shareAdd: (botId, person, role) => call('share-add', { botId, staffUserId: person.id, email: person.email, name: person.name, role }),
+    shareRemove: (botId, staffUserId) => call('share-remove', { botId, staffUserId }),
+    searchStaff: q => call('staff-search', { q }),
+    claimBot: id => after(call('claim-bot', { id })),
+    claimAuthor: (sessionId, requestId) => call('author', { sessionId, requestId }),
+    authors: ids => call('authors', { ids }),
     // A failed action away from any form (a menu, the palette) shows as a toast.
     reportError: (error, where = 'action') => {
       noteClientError(where, error)

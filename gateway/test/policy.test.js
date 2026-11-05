@@ -21,6 +21,8 @@ test('the page, its assets and the plugin bundles load', () => {
 test('the ds-bot channel and its live feed pass', () => {
   assert.ok(allowed('POST', '/api/bot'))
   assert.ok(allowed('GET', '/api/bot/feed'))
+  assert.ok(allowed('GET', '/api/bot/crm/callback'))
+  assert.equal(allowed('POST', '/api/bot/crm/callback'), false)
   assert.equal(allowed('GET', '/api/bot'), false)
 })
 

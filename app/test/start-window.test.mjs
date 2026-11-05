@@ -116,7 +116,7 @@ test('only a missing file of the app\'s own says that the install is incomplete'
 })
 
 test('the main process takes only its own acts, each in its own views', () => {
-  assert.deepEqual([...START_ACTS].sort(), ['answer', 'copyDetails', 'handoffDone', 'handoffShow', 'link', 'openLogs', 'pick', 'reconnect', 'reloadView', 'retry', 'signIn', 'wait'])
+  assert.deepEqual([...START_ACTS].sort(), ['answer', 'copyDetails', 'handoffDone', 'handoffShow', 'link', 'openLogs', 'pick', 'reconnect', 'reloadView', 'retry', 'wait'])
   assert.equal(acceptsAct('handoffShow', 'handoff'), true)
   // 「换个位置…」 while the start boots and 〔重新选〕 on its cards; a card's answer only on a card.
   assert.equal(acceptsAct('pick', 'boot'), true)
@@ -136,8 +136,8 @@ test('the main process takes only its own acts, each in its own views', () => {
   assert.equal(acceptsAct('wait', 'failed'), false)
   assert.equal(acceptsAct('reloadView', 'viewFailed'), true)
   assert.equal(acceptsAct('reloadView', 'failed'), false)
-  // Server mode: the VPN card's 〔重试〕 and the access link card's acts, only on a card.
-  for (const name of ['reconnect', 'link', 'signIn']) {
+  // Server mode: the VPN card's 〔重试〕 and the access link card's link, only on a card.
+  for (const name of ['reconnect', 'link']) {
     assert.equal(acceptsAct(name, 'card'), true, name)
     for (const view of ['boot', 'failed', 'viewFailed', 'watchdog', 'handoff']) assert.equal(acceptsAct(name, view), false, `${name} in ${view}`)
   }
@@ -318,14 +318,14 @@ function startWindow(t) {
   t.mock.method(console, 'log', () => {})
   const fake = fakeElectron()
   const main = new fake.electron.BrowserWindow({ show: false })
-  const calls = { retry: 0, reload: 0, close: 0, pick: [], answer: [], reconnect: 0, link: [], signIn: 0 }
+  const calls = { retry: 0, reload: 0, close: 0, pick: [], answer: [], reconnect: 0, link: [] }
   const start = new StartWindow({
     electron: fake.electron, page: join(tmpdir(), 'start', 'start.html'), preload: 'preload.cjs', icon: 'icon.ico', mica: false, devTools: false,
     lang: () => 'en', motion: 'normal', version: '0.0.0', program: [], log: { dir: 'logs', tail: () => ['a log line'] },
     mainWindow: () => main,
     onRetry: () => { calls.retry += 1 }, onReload: () => { calls.reload += 1 }, onClose: () => { calls.close += 1 },
     onPick: (value) => { calls.pick.push(value) }, onAnswer: (value) => { calls.answer.push(value) },
-    onReconnect: () => { calls.reconnect += 1 }, onLink: (value) => { calls.link.push(value) }, onSignIn: () => { calls.signIn += 1 },
+    onReconnect: () => { calls.reconnect += 1 }, onLink: (value) => { calls.link.push(value) },
   })
   const win = () => fake.windows.at(-1)
   const page = () => ({ sender: win().webContents, senderFrame: win().webContents.mainFrame })
@@ -569,9 +569,9 @@ test('server mode: the VPN card, the access link card and the way back to the bo
   s.start.done('data')
   s.start.done('engine')
   s.start.teamLoading()
-  // The page answered 401: the link card. Its 20 s verdict waits for the answer, and a link
+  // DSH Web answered 401: the link card. Its 20 s verdict waits for the answer, and a link
   // pasted on it starts the check over instead of failing at once.
-  s.start.card({ kind: 'link', host: 'ia.example.test', signIn: false })
+  s.start.card({ kind: 'link', host: 'ia.example.test' })
   s.tick(25_000)
   assert.equal(s.state().view, 'card')
   const link = `https://ia.example.test/?token=${'x'.repeat(5000)}`
@@ -579,8 +579,6 @@ test('server mode: the VPN card, the access link card and the way back to the bo
   assert.equal(s.calls.link.at(-1).length, 4097, 'the link reaches the main process, cut where no access link is that long')
   assert.equal(s.act('link', 'not an object'), true)
   assert.equal(s.calls.link.at(-1), '')
-  assert.equal(s.act('signIn'), true)
-  assert.equal(s.calls.signIn, 1)
   s.start.connecting()
   assert.equal(s.state().view, 'boot')
   s.start.teamLoading()

@@ -1,8 +1,8 @@
 // Server mode (docs/plans/2026-11-05-desktop-server-client.md): the app opens a team that runs on
 // a server instead of booting a DSH Host of its own. The plain rules live here, so that the
 // tests run without Electron: where the server address comes from, whether the server answered,
-// which pages stay in the window, what the server's page may ask for and which access links the
-// window may load.
+// which pages stay in the window (the team and its sign-in), what the server's page may ask for
+// and which access links the window may load.
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
@@ -11,13 +11,15 @@ export const SERVER_FILE = 'server.json'
 export const PROBE_TIMEOUT_MS = 4_000
 export const RETRY_MS = 5_000
 export const LINK_MAX = 4_096
-// The gateway's sign-in on the server's own origin. It runs in the system browser from start to
-// end: its state cookie and its callback have to meet in one browser.
+// The gateway's sign-in on the server's own origin (/auth/login, /auth/callback, /auth/logout).
+// It runs in the window, with Cognito's hosted pages, so that the session cookie it sets at the
+// end lands in the window's own session: its state cookie and its callback meet there.
 export const AUTH_PATH = '/auth'
-// Sign-in pages that refuse embedded browsers (Google does) or that the gateway sends to.
-export const AUTH_HOSTS = Object.freeze(['accounts.google.com', 'login.microsoftonline.com'])
-// Cognito's hosted sign-in: <prefix>.auth.<region>.amazoncognito.com.
-export const AUTH_DOMAINS = Object.freeze(['amazoncognito.com'])
+// Cognito's hosted sign-in on its own domain: <prefix>.auth.<region>.amazoncognito.com.
+const COGNITO_HOSTED = /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.auth\.[a-z0-9-]+\.amazoncognito\.com$/u
+// Federated providers refuse embedded browsers, and a sign-in finished in the system browser
+// never reaches the window: they only open outside, never as part of the window's sign-in.
+export const FEDERATED_HOSTS = Object.freeze({ 'accounts.google.com': 'Google', 'login.microsoftonline.com': 'Microsoft' })
 // What the server's own page may ask of the window; the rest, and every other origin, is refused.
 export const SERVER_PERMISSIONS = Object.freeze(['clipboard-read', 'clipboard-sanitized-write', 'fullscreen', 'media', 'notifications'])
 
@@ -153,11 +155,12 @@ export function probe(url, { request, timeout = PROBE_TIMEOUT_MS }) {
 const authPath = path => path === AUTH_PATH || path.startsWith(`${AUTH_PATH}/`)
 
 /**
- * Where a page goes. The server's own pages stay in the window. Sign-in pages go to the system
- * browser ('auth'): Google refuses embedded browsers, and the gateway's sign-in has to run in
- * one browser from start to end. Every other web page goes to the system browser ('outside'),
- * and anything that is not a web page goes nowhere.
- * @returns {'inside' | 'auth' | 'outside' | 'blocked'}
+ * Where a page goes. The server's own pages stay in the window ('inside'), and so does its
+ * sign-in ('signin'): the gateway's /auth pages and Cognito's hosted pages, so that the session
+ * cookie lands in the window. Google and Microsoft ('federated') refuse embedded browsers and go
+ * to the system browser. Every other web page goes to the system browser ('outside'), and
+ * anything that is not a web page goes nowhere.
+ * @returns {'inside' | 'signin' | 'federated' | 'outside' | 'blocked'}
  */
 export function navigationOf(url, origin) {
   let target
@@ -167,10 +170,23 @@ export function navigationOf(url, origin) {
     return 'blocked'
   }
   if (target.protocol !== 'https:' && target.protocol !== 'http:') return 'blocked'
-  if (target.origin === origin && target.username === '' && target.password === '') return authPath(target.pathname) ? 'auth' : 'inside'
+  const plain = target.username === '' && target.password === ''
+  if (target.origin === origin && plain) return authPath(target.pathname) ? 'signin' : 'inside'
   const host = target.hostname.toLowerCase()
-  if (AUTH_HOSTS.includes(host) || AUTH_DOMAINS.some(domain => host.endsWith(`.${domain}`))) return 'auth'
+  if (target.protocol === 'https:' && target.port === '' && plain && COGNITO_HOSTED.test(host)) return 'signin'
+  if (Object.hasOwn(FEDERATED_HOSTS, host)) return 'federated'
   return 'outside'
+}
+
+/** The name of the federated provider a page belongs to, for the message that refuses it. */
+export function federatedName(url) {
+  let host
+  try {
+    host = new URL(url).hostname.toLowerCase()
+  } catch {
+    return 'another provider'
+  }
+  return Object.hasOwn(FEDERATED_HOSTS, host) ? FEDERATED_HOSTS[host] : host
 }
 
 /**

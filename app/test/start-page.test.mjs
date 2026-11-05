@@ -62,7 +62,7 @@ test('the page sends only the acts of the start window', () => {
     ...[...code['start.js'].matchAll(/\bact: '(\w+)'|\bact\('(\w+)'/gu)].map(match => match[1] ?? match[2]),
     ...[...code['whale.js'].matchAll(/\bact\('(\w+)'\)/gu)].map(match => match[1]),
   ].filter(name => !local.has(name)))
-  assert.deepEqual([...sent].sort(), ['answer', 'copyDetails', 'freshStart', 'handoffDone', 'handoffShow', 'importModel', 'importOption', 'installUpdate', 'keepCopying', 'link', 'manualDownload', 'openLogs', 'pick', 'reconnect', 'reloadView', 'retry', 'signIn', 'stopCopy', 'wait'])
+  assert.deepEqual([...sent].sort(), ['answer', 'copyDetails', 'freshStart', 'handoffDone', 'handoffShow', 'importModel', 'importOption', 'installUpdate', 'keepCopying', 'link', 'manualDownload', 'openLogs', 'pick', 'reconnect', 'reloadView', 'retry', 'stopCopy', 'wait'])
   // Every act the main process takes is one that the page sends, under the same name.
   for (const name of START_ACTS) assert.ok(sent.has(name), `the main process takes ${name}, which the page never sends`)
 })
@@ -145,7 +145,7 @@ import { PRODUCT_NAME } from '../src/legacy.mjs'
 // docs/plans/2026-10-26-windows-onboarding.md, 用词: proper names and units only.
 test('the zh copy shows no English but the allowed names and units', () => {
   const NAMES = [PRODUCT_NAME, 'Atenea', 'Iruz Labs', 'Iruz', 'DS Bot', 'DSH Desktop', 'DSH Web']
-  const WORDS = new Set(['DeepSeek', 'Bot', 'API', 'Key', 'Harness', 'DSH', 'Agent', 'MCP', 'Windows', 'PowerShell', 'GitHub', 'SmartScreen', 'OneDrive', 'HTTP', 'SOCKS', 'KB', 'MB', 'GB', 'VPN', 'https'])
+  const WORDS = new Set(['DeepSeek', 'Bot', 'API', 'Key', 'Harness', 'DSH', 'Agent', 'MCP', 'Windows', 'PowerShell', 'GitHub', 'SmartScreen', 'OneDrive', 'HTTP', 'SOCKS', 'KB', 'MB', 'GB', 'VPN', 'https', 'Cognito'])
   const english = []
   for (const [key, value] of Object.entries(TEXT.zh)) {
     let rest = value.replace(PLACEHOLDER, ' ')
@@ -176,7 +176,7 @@ test('every text key that the page uses exists', () => {
   assert.deepEqual(matching('reason.start.{reason}').sort(), ['reason.start.engine', 'reason.start.files', 'reason.start.other', 'reason.start.permission', 'reason.start.server', 'reason.start.space'])
   // The server mode cards' variants (main.mjs).
   assert.deepEqual(matching('card.vpn.{problem}').sort(), ['card.vpn.auto', 'card.vpn.away', 'card.vpn.tls'])
-  assert.deepEqual(matching('card.link.{problem}').sort(), ['card.link.browser', 'card.link.lead', 'card.link.spent', 'card.link.wrong'])
+  assert.deepEqual(matching('card.link.{problem}').sort(), ['card.link.lead', 'card.link.spent', 'card.link.wrong'])
   assert.deepEqual(matching('reason.place.{reason}').sort(), ['reason.place.dsh', 'reason.place.foreign', 'reason.place.nested', 'reason.place.onedrive', 'reason.place.permission', 'reason.place.program', 'reason.place.space'])
   assert.deepEqual(matching('reason.copy.{reason}').sort(), ['reason.copy.full', 'reason.copy.inUse', 'reason.copy.permission'])
 })

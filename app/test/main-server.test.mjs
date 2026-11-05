@@ -1,7 +1,8 @@
-// Server mode in the main process (docs/plans/2026-11-05-desktop-server-client.md): no Host, no
-// data folder; the VPN card while the server does not answer, the access link card while the
-// server does not know the window, then the server's page in the team window. The token of a
-// pasted link never goes into the log.
+// Server mode in the main process (docs/plans/2026-11-05-desktop-server-client.md), against
+// DSH Web without a gateway: no Host, no data folder; the VPN card while the server does not
+// answer, the access link card while DSH Web answers 401, then the server's page in the team
+// window. The token of a pasted link never goes into the log. The gateway's sign-in is in
+// main-server-gateway.test.mjs.
 import assert from 'node:assert/strict'
 import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
@@ -66,7 +67,7 @@ test('once the server answers, its page loads; a 401 puts the access link card u
   const win = window()
   await waitFor(() => win.loaded.includes(`${SERVER}/`), 'load the server')
   await waitFor(() => startState()?.card?.kind === 'link', 'ask for the access link')
-  assert.deepEqual(startState().card, { kind: 'link', host: 'ia.example.test', signIn: false })
+  assert.deepEqual(startState().card, { kind: 'link', host: 'ia.example.test' })
   // The window was made for the server: its preload gets the reduced bridge and no webviews.
   const preferences = win.options.webPreferences
   assert.ok(preferences.additionalArguments.includes(`--ds-bot-origin=${SERVER}`))
@@ -96,7 +97,7 @@ test('a good access link loads once and the team view hands over', async () => {
   await waitFor(() => win.visible === true, 'show the team window')
 })
 
-test('the server\'s pages stay in the window; other sites and sign-ins open in the system browser', () => {
+test('the server\'s pages stay in the window; other sites, Google and Microsoft open in the system browser', () => {
   const contents = window().webContents
   assert.equal(pageEvent(contents, 'will-navigate', `${SERVER}/bot/1`).prevented, false)
   for (const url of ['https://github.com/atene-ai', 'https://accounts.google.com/o/oauth2/v2/auth', 'https://login.microsoftonline.com/common']) {
@@ -118,18 +119,14 @@ test('the server\'s pages stay in the window; other sites and sign-ins open in t
   })
 })
 
-test('a sign-in redirect after the hand-off brings the start window back with the link card', async () => {
+test('a plain 401 after the hand-off brings the start window back with the link card', async () => {
   const win = window()
   const starts = startWindows().length
-  const event = pageEvent(win.webContents, 'will-redirect', `${SERVER}/auth/login`)
-  assert.equal(event.prevented, true)
-  assert.ok(state.opened.includes(`${SERVER}/auth/login`))
+  // The page reloads and DSH Web no longer knows the window.
+  assert.equal(await win.navigate(`${SERVER}/`), true)
   await waitFor(() => startWindows().length > starts, 'open the start window again')
   await waitFor(() => startState()?.card?.kind === 'link', 'ask for the access link')
-  assert.equal(startState().card.signIn, true)
   assert.equal(win.visible, false, 'the team window waits behind the start window')
-  act('signIn')
-  assert.equal(state.opened.filter(url => url === `${SERVER}/auth/login`).length, 2)
   // A link the server refuses says so on the card.
   act('link', { value: `${SERVER}/?token=spent-token` })
   await waitFor(() => startState()?.card?.problem === 'spent', 'say the link was refused')

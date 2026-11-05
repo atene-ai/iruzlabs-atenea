@@ -468,15 +468,13 @@ function failed(el) {
   el.querySelector('[data-main]').dataset.look = update && update.state !== 'failed' ? 'soft' : 'primary'
   if (update?.state === 'downloading') bar(banner.querySelector('.bar-fill'), (update.percent ?? 0) / 100, true)
 }
-// The access link card (server mode): the field shows the shape of the link, the line under it
-// why the last one did not work, and the sign-in row is there once the app has sent the sign-in
-// to the system browser.
+// The access link card (server mode without a gateway): the field shows the shape of the link,
+// and the line under it why the last one did not work.
 function linkCard(el) {
   const card = s.card ?? {}
   const input = el.querySelector('.link-input')
   input.placeholder = card.host ? `https://${card.host}/?token=…` : ''
   input.setAttribute('aria-label', say('status.link'))
-  for (const node of el.querySelectorAll('[data-signin]')) node.hidden = !card.signIn
   el.querySelector('[data-problem]').hidden = !card.problem
 }
 // The link goes to the main process as it was pasted; the main process checks it.

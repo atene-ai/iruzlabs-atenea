@@ -41,9 +41,11 @@ export const state = {
   paths: {},
   dock: { setIcon: () => {} },
   // Server mode: what the network answers (net.request) — { status } or { error } — and the
-  // requests it got; the HTTP status of a page the window loads, which did-navigate reports.
+  // requests it got; where the server redirects a page (the next address, or none), and the
+  // HTTP status of the page a load ends on, which did-navigate reports.
   netAnswer: undefined,
   netRequests: [],
+  redirectOf: undefined,
   pageStatus: undefined,
   permissions: {},
 }
@@ -97,8 +99,23 @@ export class FakeWindow extends EventEmitter {
     this.url = url
     this.loaded.push(url)
     if (state.rejectLoads || this.rejectLoads) throw new Error(`the page ${url} did not load`)
-    const status = state.pageStatus?.(url)
-    if (status !== undefined) this.webContents.emit('did-navigate', {}, url, status)
+    // The server's redirects: each hop is offered to will-redirect, and a cancelled one ends the
+    // load the way Chromium does.
+    let at = url
+    for (let hop = 0; hop < 20; hop += 1) {
+      const next = state.redirectOf?.(at)
+      if (next === undefined) break
+      const event = { url: next, isMainFrame: true, defaultPrevented: false, preventDefault() { this.defaultPrevented = true } }
+      this.webContents.emit('will-redirect', event, next, false, true)
+      if (event.defaultPrevented) throw Object.assign(new Error('ERR_FAILED (-2)'), { code: 'ERR_FAILED', errno: -2 })
+      at = next
+    }
+    this.url = at
+    const status = state.pageStatus?.(at)
+    if (status !== undefined) {
+      this.webContents.emit('did-navigate', {}, at, status)
+      this.webContents.emit('did-finish-load')
+    }
     // The Host trades the token of the launch URL for a cookie of the browser's session.
     try {
       const parsed = new URL(url)
@@ -111,6 +128,18 @@ export class FakeWindow extends EventEmitter {
       setImmediate(() => { if (!this.destroyed) this.emit('ready-to-show') })
     }
   }
+}
+
+/**
+ * A navigation the page starts itself (a link, a form): will-navigate first, then the load.
+ * @returns {Promise<boolean>} whether the window went
+ */
+FakeWindow.prototype.navigate = async function navigate(url) {
+  const event = { url, isMainFrame: true, defaultPrevented: false, preventDefault() { this.defaultPrevented = true } }
+  this.webContents.emit('will-navigate', event, url)
+  if (event.defaultPrevented) return false
+  await this.loadURL(url).catch(() => {})
+  return true
 }
 
 class FakeWebContents extends EventEmitter {

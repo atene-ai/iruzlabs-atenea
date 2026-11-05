@@ -1,6 +1,7 @@
 // Server mode (docs/plans/2026-11-05-desktop-server-client.md): where the server address comes
-// from, whether the server answered, where the window's pages go, what the server's page may
-// ask for and which access links the window loads.
+// from, whether the server answered, where the window's pages go (the team and its sign-in stay,
+// Google and Microsoft do not), what the server's page may ask for and which access links the
+// window loads.
 import assert from 'node:assert/strict'
 import { EventEmitter } from 'node:events'
 import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
@@ -9,7 +10,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
 import {
-  accessLinkOf, LINK_MAX, loggable, navigationOf, permissionAllowed, probe, reachabilityOf, resolveServer, SERVER_ENV, SERVER_FILE, serverAddressOf, sourceName,
+  accessLinkOf, FEDERATED_HOSTS, federatedName, LINK_MAX, loggable, navigationOf, permissionAllowed, probe, reachabilityOf, resolveServer, SERVER_ENV, SERVER_FILE, serverAddressOf, sourceName,
 } from '../src/server.mjs'
 
 const SERVER = 'https://ia.example.test'
@@ -196,28 +197,47 @@ test('over real sockets: a 401 and a redirect answer, a closed port and a silent
   assert.deepEqual(await probe(`http://127.0.0.1:${String(port)}/`, { request: nodeRequest }), { reachable: false, reason: 'refused' })
 })
 
-test('the server\'s own pages stay in the window; everything else goes to the system browser', () => {
+test('the server\'s own pages stay in the window; other sites go to the system browser', () => {
   for (const url of [`${SERVER}/`, `${SERVER}/bot/123?tab=chat#x`, 'https://IA.example.test:443/settings']) assert.equal(navigationOf(url, SERVER), 'inside', url)
   for (const url of ['https://github.com/atene-ai', 'https://example.test/', 'http://ia.example.test/', 'https://ia.example.test:8443/', 'https://other.ia.example.test/', 'https://ia.example.test.evil.test/']) {
     assert.equal(navigationOf(url, SERVER), 'outside', url)
   }
 })
 
-test('sign-in pages go to the system browser: Google, Microsoft, Cognito and the gateway\'s own', () => {
+test('the sign-in stays in the window: the gateway\'s /auth pages and Cognito\'s hosted pages', () => {
   for (const url of [
-    'https://accounts.google.com/o/oauth2/v2/auth?client_id=x',
-    'https://login.microsoftonline.com/common/oauth2/v2.0/authorize',
-    'https://iruz.auth.eu-west-1.amazoncognito.com/login?client_id=x',
-    'https://cognito-idp.eu-west-1.amazoncognito.com/',
-    `${SERVER}/auth/login`,
+    `${SERVER}/auth/login?return_to=%2F`,
     `${SERVER}/auth`,
-    `${SERVER}/auth/callback?code=x`,
-  ]) assert.equal(navigationOf(url, SERVER), 'auth', url)
-  // Only the path itself: a page whose name starts with "auth" stays.
+    `${SERVER}/auth/callback?code=x&state=y`,
+    `${SERVER}/auth/logout`,
+    'https://iruz-atenea.auth.mx-central-1.amazoncognito.com/oauth2/authorize?client_id=x&state=y',
+    'https://iruz-atenea.auth.mx-central-1.amazoncognito.com/login?client_id=x',
+    'https://iruz-atenea.auth.mx-central-1.amazoncognito.com/logout?client_id=x&logout_uri=https%3A%2F%2Fia.example.test%2F',
+    'https://IRUZ.auth.us-east-1.amazoncognito.com/forgotPassword',
+  ]) assert.equal(navigationOf(url, SERVER), 'signin', url)
+  // Only the path itself: a page whose name starts with "auth" is a team page.
   assert.equal(navigationOf(`${SERVER}/authors`, SERVER), 'inside')
-  // A look-alike host is just another site.
-  assert.equal(navigationOf('https://amazoncognito.com.evil.test/', SERVER), 'outside')
+  // Cognito's own API hosts, plain http, another port, a user name or a look-alike are not its hosted sign-in.
+  for (const url of [
+    'https://cognito-idp.mx-central-1.amazoncognito.com/',
+    'http://iruz.auth.mx-central-1.amazoncognito.com/login',
+    'https://iruz.auth.mx-central-1.amazoncognito.com:8443/login',
+    'https://someone@iruz.auth.mx-central-1.amazoncognito.com/login',
+    'https://iruz.auth.mx-central-1.amazoncognito.com.evil.test/login',
+    'https://amazoncognito.com/',
+    'https://auth.iruzlabs.com/login',
+  ]) assert.equal(navigationOf(url, SERVER), 'outside', url)
+})
+
+test('Google and Microsoft are federated: never in the window, and named for the message', () => {
+  for (const url of ['https://accounts.google.com/o/oauth2/v2/auth?client_id=x', 'https://ACCOUNTS.google.com/', 'https://login.microsoftonline.com/common/oauth2/v2.0/authorize']) {
+    assert.equal(navigationOf(url, SERVER), 'federated', url)
+  }
   assert.equal(navigationOf('https://accounts.google.com.evil.test/', SERVER), 'outside')
+  assert.equal(federatedName('https://accounts.google.com/o/oauth2/v2/auth'), 'Google')
+  assert.equal(federatedName('https://login.microsoftonline.com/common'), 'Microsoft')
+  assert.equal(federatedName('https://constructor/'), 'constructor')
+  assert.equal(FEDERATED_HOSTS['accounts.google.com'], 'Google')
 })
 
 test('what is not a web page goes nowhere', () => {

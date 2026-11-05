@@ -91,7 +91,6 @@ export const TEXT = {
     'card.vpn.tls': '和 {host} 的连接不安全（证书无效），所以 Atenea 没有连接。请连上 Iruz 的 VPN；已经连上的话，请告诉 Atenea 的管理员。',
     'card.vpn.auto': 'Atenea 每 5 秒会再试一次。',
     'card.link.lead': '进入 {host} 需要你的访问链接。把它贴在这里，打开你的团队。',
-    'card.link.browser': 'Atenea 已经在浏览器里打开了登录页面。登录好以后，把访问链接贴在这里。',
     'card.link.wrong': '这不是 {host} 的访问链接。',
     'card.link.spent': '{host} 没有接受这个链接，它可能已经用过或过期了。请要一个新的。',
     // reason
@@ -146,7 +145,6 @@ export const TEXT = {
     'btn.notNowDownload': '先不下载',
     'btn.ok': '确定',
     'btn.openLink': '打开',
-    'btn.signIn': '再打开登录页面…',
     // note
     'note.changeLater': '以后可以在 设置 → 通用 → 位置 里改。',
     'note.copyLater': '也可以在 设置 → 通用 → 位置 里复制。',
@@ -195,6 +193,7 @@ export const TEXT = {
     'dialog.update.availableDetail': '这个版本不能自己更新。请到发布页下载新版，再用它替换「应用程序」里的 Atenea。',
     'dialog.update.onFailure': 'Atenea {version} 下载完会自动安装，然后重新打开。',
     'dialog.update.onFailurePage': 'Atenea {version} 已经发布。关掉这个对话框后，会打开它的下载页面。',
+    'dialog.signIn.federated': '这里要用你的 Iruz 用户名和密码（Cognito）登录。{provider} 在 Atenea 的窗口里用不了，所以没有打开。',
   },
   en: {
     // voice
@@ -265,7 +264,6 @@ export const TEXT = {
     'card.vpn.tls': 'The connection to {host} isn’t secure (its certificate isn’t valid), so Atenea didn’t connect. Connect to the Iruz VPN; if you already are, tell whoever runs Atenea.',
     'card.vpn.auto': 'Atenea tries again every 5 seconds.',
     'card.link.lead': 'Getting into {host} takes your access link. Paste it here to open your team.',
-    'card.link.browser': 'Atenea opened the sign-in in your browser. Once you have signed in, paste your access link here.',
     'card.link.wrong': 'That isn’t an access link to {host}.',
     'card.link.spent': '{host} didn’t accept that link: it may have been used already or expired. Ask for a new one.',
     // reason
@@ -320,7 +318,6 @@ export const TEXT = {
     'btn.notNowDownload': 'Not now',
     'btn.ok': 'OK',
     'btn.openLink': 'Open',
-    'btn.signIn': 'Open the sign-in again…',
     // note
     'note.changeLater': 'You can change this later in Settings → General → Location.',
     'note.copyLater': 'You can also copy the team in Settings → General → Location.',
@@ -369,6 +366,7 @@ export const TEXT = {
     'dialog.update.availableDetail': 'This version can’t update itself. Download the new version from its release page, then replace Atenea in Applications with it.',
     'dialog.update.onFailure': 'Atenea {version} installs itself when its download is done, and then opens again.',
     'dialog.update.onFailurePage': 'Atenea {version} is out. Once this box is closed, its download page opens.',
+    'dialog.signIn.federated': 'This sign-in must use your Iruz user name and password (Cognito). {provider} doesn’t work in Atenea’s window, so it wasn’t opened.',
   },
   es: {
     // voice
@@ -439,7 +437,6 @@ export const TEXT = {
     'card.vpn.tls': 'La conexión con {host} no es segura (su certificado no es válido), así que Atenea no se conectó. Conéctate a la VPN de Iruz; si ya lo estás, avisa a quien administra Atenea.',
     'card.vpn.auto': 'Atenea lo vuelve a intentar cada 5 segundos.',
     'card.link.lead': 'Para entrar en {host} hace falta tu enlace de acceso. Pégalo aquí para abrir tu equipo.',
-    'card.link.browser': 'Atenea abrió el inicio de sesión en tu navegador. Cuando hayas entrado, pega aquí tu enlace de acceso.',
     'card.link.wrong': 'Ese no es un enlace de acceso a {host}.',
     'card.link.spent': '{host} no aceptó ese enlace: puede que ya se haya usado o que haya caducado. Pide uno nuevo.',
     // reason
@@ -494,7 +491,6 @@ export const TEXT = {
     'btn.notNowDownload': 'Ahora no',
     'btn.ok': 'Aceptar',
     'btn.openLink': 'Entrar',
-    'btn.signIn': 'Volver a iniciar sesión…',
     // note
     'note.changeLater': 'Puedes cambiarlo más adelante en Settings → General → Location.',
     'note.copyLater': 'También puedes copiar el equipo en Settings → General → Location.',
@@ -543,6 +539,7 @@ export const TEXT = {
     'dialog.update.availableDetail': 'Esta versión no puede actualizarse sola. Descarga la versión nueva desde su página de publicación y reemplaza con ella Atenea en Aplicaciones.',
     'dialog.update.onFailure': 'Atenea {version} se instala sola cuando termine de descargarse y después se vuelve a abrir.',
     'dialog.update.onFailurePage': 'Ya salió Atenea {version}. Al cerrar este cuadro se abre su página de descarga.',
+    'dialog.signIn.federated': 'Este inicio de sesión tiene que hacerse con tu usuario y contraseña de Iruz (Cognito). {provider} no funciona dentro de la ventana de Atenea, así que no se abrió.',
   },
 }
 

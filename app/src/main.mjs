@@ -18,7 +18,7 @@ import { ARTIFACT_PREFIX, configureIdentity, PRODUCT_NAME } from './legacy.mjs'
 import { hostPort } from './host-port.mjs'
 import { captureStdio, LogFile } from './logs.mjs'
 import { currentRootOf, driveOf, formatBytes, freeSpace, isEmptyTree, pickFrom, placeOf, rootOf } from './place.mjs'
-import { accessLinkOf, loggable, navigationOf, permissionAllowed, probe, resolveServer, RETRY_MS, sourceName } from './server.mjs'
+import { accessLinkOf, federatedName, loggable, navigationOf, permissionAllowed, probe, resolveServer, RETRY_MS, sourceName } from './server.mjs'
 import { createShell, SHELL_TEXT } from './shell.mjs'
 import { readStartFrame, writeStartFrame } from './start-frame.mjs'
 import { explainOf, StartWindow } from './start-window.mjs'
@@ -135,8 +135,10 @@ let serverRetry
 let unanswered
 // The access link card while it is up.
 let linkCard
-// The sign-in page the server sent the window to, which the card can open again.
-let signInUrl
+// The window is on its way through the sign-in (the gateway's /auth pages, Cognito's pages), and
+// the status of the page it is on.
+let signingIn = false
+let pageStatus
 // A pasted access link is loading: a 401 now means the server refused it.
 let linkLoading = false
 // The server's team view has called ready() once: a window built anew may load it straight away.
@@ -201,7 +203,6 @@ if (canonical !== undefined) {
     onAnswer: (value) => { placeAnswer(value).catch(fail) },
     onReconnect: () => { connectServer().catch(fail) },
     onLink: (value) => { openLink(value) },
-    onSignIn: () => { if (signInUrl !== undefined) openOutside(signInUrl) },
   })
   // A second launch shows the window that is showing: the start window until the hand-off
   // (also after a failed start), then the team window, built anew when it is gone.
@@ -339,8 +340,8 @@ async function connectServer({ again = false } = {}) {
   loadServer(server.url)
 }
 
-// The hidden team window loads the server's page, or a pasted access link once. A 401 or a
-// sign-in on the way puts the access link card up instead (watchServer).
+// The hidden team window loads the server's page, or a pasted access link once. A sign-in on the
+// way shows in the window; a plain 401 puts the access link card up (watchServer).
 function loadServer(url) {
   const win = mainWindow
   if (win === undefined || win.isDestroyed()) return
@@ -349,9 +350,9 @@ function loadServer(url) {
   win.loadURL(url).catch((error) => { if (linkCard === undefined) console.log(`Atenea: the server's page did not load (${String(error?.code ?? 'no code')})`) })
 }
 
-// The server does not know this window yet (DSH Web answers 401 until an access link has set its
-// cookie), or it sent the window to the sign-in. After the hand-off the start window comes back
-// for the card, over the hidden team window.
+// DSH Web without a gateway does not know this window yet: it answers 401 until an access link
+// has set its cookie. After the hand-off the start window comes back for the card, over the
+// hidden team window.
 function needLink() {
   const problem = linkLoading ? 'spent' : undefined
   linkLoading = false
@@ -361,7 +362,7 @@ function needLink() {
     startWindow.done('engine')
   }
   if (linkCard === undefined) console.log(`Atenea: ${server.origin} asks who this is; the access link card is up`)
-  linkCard = { kind: 'link', host: new URL(server.origin).host, signIn: signInUrl !== undefined, ...(problem === undefined ? {} : { problem }) }
+  linkCard = { kind: 'link', host: new URL(server.origin).host, ...(problem === undefined ? {} : { problem }) }
   startWindow.card(linkCard)
 }
 
@@ -390,32 +391,68 @@ function guardPermissions() {
   own.setPermissionCheckHandler((_contents, permission, requestingOrigin) => permissionAllowed(permission, requestingOrigin, origin))
 }
 
-// Where the server's window goes: its own pages stay, sign-ins and other sites open in the system
-// browser. A redirect to the sign-in leaves the window without a page: the access link card
-// takes over.
+// Where the server's window goes. Its own pages and its sign-in stay; Google, Microsoft and every
+// other site open in the system browser, except that a sign-in in the window never goes on to
+// Google or Microsoft: it would end in the system browser, whose cookie the window never gets.
 function watchServer(contents) {
   contents.on('will-navigate', (event, url) => {
-    const where = navigationOf(event.url ?? url, origin)
-    if (where === 'inside') return
+    const to = event.url ?? url
+    const where = navigationOf(to, origin)
+    if (where === 'inside' || where === 'signin') return
     event.preventDefault()
-    if (where !== 'blocked') openOutside(event.url ?? url)
+    leaveServer(to, where)
   })
   // Also for a frame inside the page, whose redirects are the frame's business.
   contents.on('will-redirect', (event, url, _inPlace, isMainFrame) => {
     if ((event.isMainFrame ?? isMainFrame) === false) return
     const to = event.url ?? url
     const where = navigationOf(to, origin)
-    if (where === 'inside') return
+    if (where === 'signin') signIn(to)
+    if (where === 'inside' || where === 'signin') return
     event.preventDefault()
-    if (where === 'blocked') return
-    console.log(`Atenea: the server sent the window to ${loggable(to)}, which opens in the system browser`)
-    openOutside(to)
-    if (where === 'auth') { signInUrl = to; needLink() }
+    leaveServer(to, where)
   })
   contents.on('did-navigate', (_event, url, status) => {
-    if (status === 401 && navigationOf(url, origin) === 'inside') needLink()
-    else linkLoading = false
+    pageStatus = status
+    const where = navigationOf(url, origin)
+    if (where === 'signin') { signIn(url); return }
+    if (where !== 'inside') return
+    if (status === 401) { needLink(); return }
+    linkLoading = false
+    if (signingIn && status < 400) {
+      signingIn = false
+      console.log(`Atenea: signed in to ${server.origin}; the team view loads`)
+    }
   })
+  // The hand-off waits for the team view's ready(), which a sign-in page or one of the
+  // gateway's own pages (no access, unavailable) never sends: these show once they are loaded.
+  contents.on('did-finish-load', () => {
+    const where = navigationOf(contents.getURL(), origin)
+    if (where === 'signin' || (where === 'inside' && pageStatus >= 400 && pageStatus !== 401)) showServerPage()
+  })
+}
+
+function signIn(url) {
+  if (signingIn) return
+  signingIn = true
+  console.log(`Atenea: ${server.origin} asks to sign in (${loggable(url)}); the sign-in shows in the window`)
+}
+
+// The start window hands over to the window, which shows the page the user has to see.
+function showServerPage() {
+  if (startWindow.owner() !== undefined) startWindow.ready()
+}
+
+function leaveServer(url, where) {
+  if (where === 'blocked') return
+  if (where === 'federated' && signingIn) {
+    const provider = federatedName(url)
+    console.log(`Atenea: the sign-in tried to continue with ${provider} (${loggable(url)}); refused, it must use the Cognito user name and password`)
+    void dialog.showMessageBox(owner(), { type: 'warning', title: PRODUCT_NAME, message: tx('dialog.signIn.federated', { provider }), buttons: [tx('btn.ok')], noLink: true })
+    return
+  }
+  if (where === 'federated' || where === 'outside') console.log(`Atenea: ${loggable(url)} opens in the system browser`)
+  openOutside(url)
 }
 
 // What the boot needs; a retry after a failure here does what is still missing.
@@ -1146,16 +1183,22 @@ function createWindow() {
     win.on('leave-full-screen', sendFullscreen)
     contents.on('did-finish-load', sendFullscreen)
   }
+  // The app's styles are for the team's own pages, not for a sign-in page that shows in the window.
+  const own = () => !serverMode() || navigationOf(contents.getURL(), origin) === 'inside'
   if (mica) {
     const css = readFileSync(join(here, 'mica.css'), 'utf8')
-    contents.on('dom-ready', () => { void contents.insertCSS(css) })
+    contents.on('dom-ready', () => { if (own()) void contents.insertCSS(css) })
   }
   const fonts = readFileSync(join(here, 'fonts.css'), 'utf8')
-  contents.on('dom-ready', () => { void contents.insertCSS(fonts) })
+  contents.on('dom-ready', () => { if (own()) void contents.insertCSS(fonts) })
   contents.setWindowOpenHandler(({ url }) => {
     // DSH's sign-in opens a blank window during the click and sends it to the sign-in page later.
     if (url === 'about:blank') return { action: 'allow', overrideBrowserWindowOptions: { show: false, webPreferences: { sandbox: true, webviewTag: false } } }
-    openOutside(url)
+    const where = serverMode() ? navigationOf(url, origin) : 'outside'
+    // A sign-in asked for in a new window happens in this one, where its cookie is wanted.
+    if (where === 'signin') void win.loadURL(url).catch(() => {})
+    else if (serverMode()) leaveServer(url, where)
+    else openOutside(url)
     return { action: 'deny' }
   })
   contents.on('did-create-window', (child) => {

@@ -6,7 +6,7 @@
 
 ## Why
 
-Atenea now runs for the whole company as a server: DSH Web with the `ds-bot` plugin behind Caddy at `https://ia.iruzlabs.com`, reachable only over the company WireGuard VPN (the name resolves publicly to a private address). A Cognito sign-in through a gateway will sit in front of it. Each desktop app booting its own DSH Host, data folder and Office runtime splits the team into one copy per laptop. The desktop app should open the shared team instead, keeping what the app adds over a browser tab: its own window, the tray, single instance and updates.
+Atenea now runs for the whole company as a server: DSH Web with the `ds-bot` plugin behind Caddy at `https://ia.iruzlabs.com`, reachable only over the company WireGuard VPN (the name resolves publicly to a private address). The Atenea gateway (`gateway/`) sits in front of it and signs staff in through the Cognito hosted UI. Each desktop app booting its own DSH Host, data folder and Office runtime splits the team into one copy per laptop. The desktop app should open the shared team instead, keeping what the app adds over a browser tab: its own window, the tray, single instance and updates.
 
 The local engine stays: development, CI and anyone who sets it up on purpose still run the app's own DSH Host exactly as before.
 
@@ -29,22 +29,30 @@ The local engine stays: development, CI and anyone who sets it up on purpose sti
 - The start window shows as on a later start (kind `server`, line "Connecting to Atenea…").
 - The app asks the server once with `GET <url>/` through Electron's `net.request` (Chromium's own stack: the same DNS, proxy and certificates as the window), 4 s timeout, no cookies, redirects not followed. **Any HTTP answer, 401 and 3xx included, means reachable.** No answer (name not resolved, timeout, refused, no route, TLS failure) means not reachable.
 - Not reachable: the **VPN card** ("Connect to the Iruz VPN": Atenea only works inside the Iruz VPN) with 〔Retry〕, and the app asks again by itself 5 s after each failed try; the card stays up between tries. A TLS failure says so instead (the certificate is not valid; connect to the VPN or tell whoever runs Atenea). The log names the reason once per change, not every 5 s.
-- Reachable: the hidden team window loads the server's URL; the start window hands over when the team view calls `dsBotApp.ready()`, as in local mode.
+- Reachable: the hidden team window loads the server's URL. The start window hands over when the window has a page the user must see: the team view (it calls `dsBotApp.ready()`, as in local mode), a sign-in page, or one of the gateway's own error pages on the server origin (an HTTP error other than 401, such as "Tu cuenta no tiene acceso a Atenea"). The last two never call `ready()`, so they hand over once their load has finished.
 - The window's preload gets `--ds-bot-server` and exposes a reduced `dsBotApp`: `ready`, the app's own `updates`, `dataLocation()` resolving `null` (the plugin then hides the data location row), `moveData()` resolving `false`, a no-op `teamWorkspaceChanged`, and no `browser` (the plugin runs as in DSH Web). The engine's IPC handlers are not registered at all. `webviewTag` is off.
 - Permissions: only the server's own origin is granted, and only `clipboard-read`, `clipboard-sanitized-write`, `fullscreen`, `media` and `notifications`; everything else and every other origin is refused.
 
+### Sign-in through the gateway
+
+- The gateway answers a page without its session with a 302 to `/auth/login`. That page goes on to the Cognito hosted UI (`<prefix>.auth.<region>.amazoncognito.com`, user name and password), which comes back to `/auth/callback`. The gateway then sets `__Host-atenea_session` and redirects to the page asked for (`/`).
+- The whole sign-in runs **in the team window**, in its own (default) session: the gateway's state cookie, set by `/auth/login`, and its callback have to meet in one browser, and the session cookie has to land where the team view will use it. A sign-in in the system browser would leave the window signed out for good.
+- When the window lands on a sign-in page, the start window hands over and the team window shows it. When the sign-in comes back to the server origin outside `/auth`, the team view loads in the same window, which is already showing. The app's own stylesheets are not injected into sign-in pages.
+- Sign-out (`/auth/logout` → Cognito's `/logout` → `/` → `/auth/login`) ends on the sign-in in the same window, never on the access link card.
+- Google (`accounts.google.com`) and Microsoft (`login.microsoftonline.com`) refuse embedded browsers. A sign-in in the window that tries to go on to one of them, by a link or by a redirect, is stopped. A box says, in the user's language, that this sign-in must use the Iruz user name and password (Cognito), and the log says so. The staff app client only offers `COGNITO` (`IDENTITY_PROVIDERS=COGNITO` in `gateway/scripts/cognito-app-client.sh`).
+
 ### Navigation
 
-- Pages of the server origin (scheme, host and port) stay in the window.
-- Sign-in pages open in the system browser: `accounts.google.com`, `login.microsoftonline.com`, any `*.amazoncognito.com` (Cognito's hosted UI) and the gateway's own `/auth` path on the server origin. The gateway's sign-in has to run in one browser from start to end: its state cookie and its callback must meet. Google refuses embedded browsers anyway.
-- Every other web page opens in the system browser through `openOutside`; anything that is not `http(s)` goes nowhere.
-- A server-side redirect of the main frame away from the server origin is cancelled and opened outside; a redirect inside a frame of the page is left to the frame.
+- These stay in the window: pages of the server origin (scheme, host and port), the server's own `/auth` path, and Cognito's hosted pages. Cognito counts only on its own `https` domain (`<prefix>.auth.<region>.amazoncognito.com`, default port, no user name).
+- Google and Microsoft open in the system browser when the team view links to them. During a sign-in they are refused, as above.
+- Every other web page opens in the system browser through `openOutside`; anything that is not `http(s)` goes nowhere. A new window asked for a sign-in page loads in the team window instead.
+- A server-side redirect of the main frame away from those pages is cancelled and handled the same way; a redirect inside a frame of the page is left to the frame.
 
-### Access link
+### Access link (DSH Web without the gateway)
 
-- When the window lands on a 401 from DSH Web (it answers 401 until a `?token=` launch link sets its cookie), or the server redirects it to a sign-in, the start window shows the **access link card**: a field to paste the link `https://<server>/?token=…` and 〔Open〕. After a redirect to a sign-in it also says that the sign-in opened in the browser, with a link-style button to open it again.
+- DSH Web on its own answers 401 until a `?token=` launch link sets its cookie. When the window lands on such a plain 401, the start window shows the **access link card**: a field to paste the link `https://<server>/?token=…` and 〔Open〕. Sign-in pages and redirects never bring this card; behind the gateway a page never gets a 401, only the 302 to the sign-in.
 - The pasted text is accepted only on the server's exact origin, without credentials, outside `/auth`, with a non-empty `token` parameter, up to 4096 characters. It loads **once** in the hidden team window; it is neither stored nor logged (the log only ever has origin and path). Another site's link is refused on the card without loading anything; a link the server answers with 401 says it was refused (used or expired).
-- After the hand-off, a 401 or a sign-in redirect brings the start window back with the card over the hidden team window.
+- After the hand-off, a plain 401 brings the start window back with the card over the hidden team window.
 
 ### Unchanged
 
@@ -52,8 +60,7 @@ The local engine stays: development, CI and anyone who sets it up on purpose sti
 
 ## Not doing
 
-- No embedded sign-in: the app never shows Google, Microsoft or Cognito pages in its window.
-- No hand-back protocol yet (a custom `atenea://` link or a loopback callback from the gateway): pasting the access link is the stopgap until the gateway defines one.
+- No federated sign-in: Google and Microsoft never run inside the window, and a sign-in finished in the system browser is not handed back to the app (no `atenea://` link or loopback callback).
 - No settings screen for the server address; `server.json` and the environment variable are for administrators and developers.
 - No offline mode and no mixing: one app runs either the local engine or the server, never both.
 
@@ -62,5 +69,8 @@ The local engine stays: development, CI and anyone who sets it up on purpose sti
 - The probe only says that something answers at the address; a server that answers but serves something else shows up as a team view that does not call `ready()` within 20 s (the existing "team view didn't load" card with 〔Reload〕).
 - Links the server page opens in a new window still go to the system browser, which does not carry the app's session cookie.
 - `npm start` from a checkout also follows the build's default; developers set `ATENEA_SERVER_URL=local` for the local engine.
+- Only Cognito's default hosted domains count as its sign-in. A custom domain for the hosted UI would open in the system browser, and the window would never sign in, until it is added to the rules (`app/src/server.mjs`).
+- A Cognito redirect to Google or Microsoft before the first sign-in page has shown leaves the window without a page: the start window then gives its "team view didn't load" card after 20 s, after the box has said why.
+- On Windows the frameless window gives a sign-in page no title bar to drag, and the caption buttons sit over its top right corner.
 
 ## Changes

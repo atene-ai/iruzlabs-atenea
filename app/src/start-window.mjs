@@ -43,11 +43,9 @@ const ACT_VIEWS = {
   // (「会放在…」, a place that cannot be used).
   pick: ['boot', 'card', 'watchdog'],
   answer: ['card'],
-  // Server mode: 〔重试〕 on the VPN card, the access link pasted on the link card, and the
-  // sign-in that opens in the system browser again.
+  // Server mode: 〔重试〕 on the VPN card and the access link pasted on the link card.
   reconnect: ['card'],
   link: ['card'],
-  signIn: ['card'],
   openLogs: null,
   copyDetails: null,
 }
@@ -273,12 +271,12 @@ export class StartWindow {
    *   mainWindow: () => any,
    *   onRetry: () => void, onReload: () => void, onClose: () => void,
    *   onPick?: (value?: string) => void, onAnswer?: (value?: string) => void,
-   *   onReconnect?: () => void, onLink?: (value: string) => void, onSignIn?: () => void,
+   *   onReconnect?: () => void, onLink?: (value: string) => void,
    * }} options `lang` is asked at each open; `program` names the folders of the app's own files;
    *   `onClose` runs when the user closes the start window before the hand-off; `onPick` when
    *   the page asks for the folder picker ('changePlace' from its place line, nothing from a
    *   card's 〔重新选〕), `onAnswer` with a card's answer ('use' for 〔继续〕 on 「会放在…」);
-   *   in server mode `onReconnect`, `onLink` with the pasted link and `onSignIn` from their cards.
+   *   in server mode `onReconnect` and `onLink` with the pasted link, from their cards.
    */
   constructor(options) {
     this.#o = options
@@ -414,7 +412,7 @@ export class StartWindow {
    * A card on the sheet while the start boots (the clock stands still), or none: back to the
    * boot. The cards of a place (「会放在…」 and a place that cannot be used) and, in server mode,
    * the VPN card and the access link card.
-   * @param {{ kind: 'picked' | 'rejected' | 'vpn' | 'link', path?: string, reason?: string, host?: string, problem?: string, signIn?: boolean } | undefined} card
+   * @param {{ kind: 'picked' | 'rejected' | 'vpn' | 'link', path?: string, reason?: string, host?: string, problem?: string } | undefined} card
    */
   card(card) {
     if (!this.#open() || !['boot', 'card', 'watchdog'].includes(this.#state.view)) return
@@ -655,7 +653,6 @@ export class StartWindow {
     else if (name === 'answer') this.#o.onAnswer?.(valueOf(payload))
     else if (name === 'reconnect') this.#o.onReconnect?.()
     else if (name === 'link') this.#o.onLink?.(linkOf(payload))
-    else if (name === 'signIn') this.#o.onSignIn?.()
     return true
   }
 

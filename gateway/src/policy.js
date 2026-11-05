@@ -44,6 +44,10 @@ function api(method, pathname, searchParams, { fileRoots }) {
       return method === 'POST' ? allow : deny(405, 'method')
     case '/api/bot/feed':
       return method === 'GET' ? allow : deny(405, 'method')
+    // The CRM's Cognito sends the browser back here after a staff member links their own
+    // CRM user (ds-bot src/host/crm.js); ds-bot needs the identity to know whose link it is.
+    case '/api/bot/crm/callback':
+      return method === 'GET' ? allow : deny(405, 'method')
     case '/api/file':
       if (!READ.has(method)) return deny(405, 'method')
       return fileAllowed(searchParams, fileRoots) ? allow : deny(403, 'file outside the work folders')

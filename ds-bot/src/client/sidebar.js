@@ -780,6 +780,9 @@ const NO_SNAPSHOT = () => null
 // `seat` is the shell's settings.launcher seat: at priority -10 the whale wins it
 // over a shell account plugin's own launcher (the Desktop's "··· More"), which comes
 // back in Agent mode; FooterAccount stands in while no seat exists at all.
+// SLA's staff roles, as the account menu names them on a shared server.
+const STAFF_ROLES = { superadmin: 'Superadmin', product_lead: 'Product lead', support: 'Support' }
+
 export function AccountLauncher({ seat = true, settingsOpen, openSettings, openOnboarding, roster: propRoster, hooks, actions }) {
   const [open, setOpen] = useState(false)
   const rosterSource = hooks?.roster
@@ -866,7 +869,10 @@ export function AccountLauncher({ seat = true, settingsOpen, openSettings, openO
   }, [open])
   // DS Bot's Models page where the host serves the providers, else DSH's own.
   const openModels = actions.providers ? actions.openModels : actions.openHarnessModels
-  const user = roster?.auth?.user
+  // On a shared server the person is whoever the Atenea gateway signed in; the
+  // desktop sign-in and the shell's account belong to the server, not to them.
+  const viewer = roster?.multiuser === true ? roster.viewer : undefined
+  const user = viewer ?? roster?.auth?.user
   const groups = [
     [
       [t('Usage'), GaugeIcon, () => actions.openSettings('usage')],
@@ -879,7 +885,8 @@ export function AccountLauncher({ seat = true, settingsOpen, openSettings, openO
       [t('Switch to classic Agent mode'), SwitchIcon, () => actions.setSurface('agent')],
     ],
   ]
-  if (user) groups.push([[t('Sign out'), SignOutIcon, () => actions.authSignOut()]])
+  if (viewer) groups.push([[t('Sign out'), SignOutIcon, () => actions.serverSignOut()]])
+  else if (user) groups.push([[t('Sign out'), SignOutIcon, () => actions.authSignOut()]])
   else if (signedIn) groups.push([[accountT('signOut'), SignOutIcon, askSignOut, undefined, true]])
   else if (signedOut) groups.push([[t('Sign in to DeepSeek'), SignInIcon, () => actions.signIn()]])
   return h(Fragment, null,
@@ -889,7 +896,7 @@ export function AccountLauncher({ seat = true, settingsOpen, openSettings, openO
       user ? h('div', { className: 'bt-account-user' },
         h('div', { className: 'bt-account-user-name' }, user.name || user.email),
         h('div', { className: 'bt-account-user-email' }, user.email),
-        h('div', { className: 'bt-account-user-badge' }, user.provider === 'microsoft' ? 'Microsoft 365' : 'Google Workspace')) : null,
+        h('div', { className: 'bt-account-user-badge' }, viewer ? t(STAFF_ROLES[viewer.role] ?? 'Iruz Labs staff') : user.provider === 'microsoft' ? 'Microsoft 365' : 'Google Workspace')) : null,
       confirm !== null ? h('div', { className: 'bt-confirm', role: 'alertdialog', 'aria-label': accountT('signOut') },
         h('p', { className: 'bt-confirm-text' }, accountT(confirm === 'running' ? 'signOutRunningDescription' : confirm === 'unknown' ? 'signOutUnknownDescription' : 'signOutDescription')),
         signOutError !== '' ? h('p', { className: 'bt-confirm-error', role: 'alert' }, signOutError) : null,

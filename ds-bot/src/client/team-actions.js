@@ -144,6 +144,8 @@ export function teamActions({ call, after, partFor, roster, ui, live, cards, hel
     authStart: provider => call('auth-start', { provider }),
     authCancel: () => call('auth-cancel'),
     authSignOut: () => after(call('auth-sign-out')),
+    // On a shared server only the Atenea gateway can end the session, Cognito's with it.
+    serverSignOut: () => { globalThis.location.assign('/auth/logout') },
     authDevLogin: payload => after(call('auth-dev-login', payload)),
     saveCapability: capability => after(call('capability-save', capability)),
     deleteCapability: name => after(call('capability-delete', { name })),

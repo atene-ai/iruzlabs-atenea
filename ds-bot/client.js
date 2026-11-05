@@ -1411,6 +1411,10 @@ var HOST_ZH = {
   "Only a superadmin can work with a Main Bot": "只有超级管理员能使用主 Bot",
   "Sign in to Atenea first": "请先登录 Atenea",
   "Sign-in is handled by the Atenea server": "登录由 Atenea 服务器处理",
+  "Superadmin": "超级管理员",
+  "Product lead": "产品负责人",
+  "Support": "支持",
+  "Iruz Labs staff": "Iruz Labs 员工",
   "Sharing is only available on a shared Atenea server": "只有共享的 Atenea 服务器才能共享",
   "SLA is not configured on this server": "这台服务器没有配置 SLA",
   "Choose editor or reader": "请选择编辑者或只读",
@@ -1968,6 +1972,10 @@ function teamActions({ call: call2, after, partFor, roster, ui: ui2, live, cards
     authStart: (provider) => call2("auth-start", { provider }),
     authCancel: () => call2("auth-cancel"),
     authSignOut: () => after(call2("auth-sign-out")),
+    // On a shared server only the Atenea gateway can end the session, Cognito's with it.
+    serverSignOut: () => {
+      globalThis.location.assign("/auth/logout");
+    },
     authDevLogin: (payload) => after(call2("auth-dev-login", payload)),
     saveCapability: (capability) => after(call2("capability-save", capability)),
     deleteCapability: (name) => after(call2("capability-delete", { name })),
@@ -11015,6 +11023,7 @@ function pressesShellShortcut(event, id) {
 var NO_SUBSCRIBE = () => () => {
 };
 var NO_SNAPSHOT = () => null;
+var STAFF_ROLES = { superadmin: "Superadmin", product_lead: "Product lead", support: "Support" };
 function AccountLauncher({ seat = true, settingsOpen, openSettings, openOnboarding, roster: propRoster, hooks, actions }) {
   const [open, setOpen] = (0, import_react21.useState)(false);
   const rosterSource = hooks?.roster;
@@ -11120,7 +11129,8 @@ function AccountLauncher({ seat = true, settingsOpen, openSettings, openOnboardi
     setBusy(false);
   }, [open]);
   const openModels = actions.providers ? actions.openModels : actions.openHarnessModels;
-  const user = roster?.auth?.user;
+  const viewer = roster?.multiuser === true ? roster.viewer : void 0;
+  const user = viewer ?? roster?.auth?.user;
   const groups = [
     [
       [t("Usage"), GaugeIcon, () => actions.openSettings("usage")],
@@ -11133,7 +11143,8 @@ function AccountLauncher({ seat = true, settingsOpen, openSettings, openOnboardi
       [t("Switch to classic Agent mode"), SwitchIcon, () => actions.setSurface("agent")]
     ]
   ];
-  if (user) groups.push([[t("Sign out"), SignOutIcon, () => actions.authSignOut()]]);
+  if (viewer) groups.push([[t("Sign out"), SignOutIcon, () => actions.serverSignOut()]]);
+  else if (user) groups.push([[t("Sign out"), SignOutIcon, () => actions.authSignOut()]]);
   else if (signedIn) groups.push([[accountT("signOut"), SignOutIcon, askSignOut, void 0, true]]);
   else if (signedOut) groups.push([[t("Sign in to DeepSeek"), SignInIcon, () => actions.signIn()]]);
   return (0, import_react21.createElement)(
@@ -11152,7 +11163,7 @@ function AccountLauncher({ seat = true, settingsOpen, openSettings, openOnboardi
         { className: "bt-account-user" },
         (0, import_react21.createElement)("div", { className: "bt-account-user-name" }, user.name || user.email),
         (0, import_react21.createElement)("div", { className: "bt-account-user-email" }, user.email),
-        (0, import_react21.createElement)("div", { className: "bt-account-user-badge" }, user.provider === "microsoft" ? "Microsoft 365" : "Google Workspace")
+        (0, import_react21.createElement)("div", { className: "bt-account-user-badge" }, viewer ? t(STAFF_ROLES[viewer.role] ?? "Iruz Labs staff") : user.provider === "microsoft" ? "Microsoft 365" : "Google Workspace")
       ) : null,
       confirm !== null ? (0, import_react21.createElement)(
         "div",

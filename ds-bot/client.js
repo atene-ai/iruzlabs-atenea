@@ -267,14 +267,16 @@ var ZH = {
   "Exclusive Internal Access": "专属内部访问",
   "Authorized corporate accounts only:": "仅限授权企业账号：",
   "Waiting for authentication in your browser…": "等待在浏览器中完成身份验证…",
-  "OAuth client ID not configured. Use direct corporate sign-in below.": "未配置 OAuth 客户端 ID，请使用下方的企业邮箱直接登录。",
+  "This sign-in is not set up on this computer. Ask your administrator.": "这台电脑还没有设置这种登录方式，请联系管理员。",
   "Authentication failed": "身份验证失败",
   "Please enter your corporate email": "请输入您的企业邮箱",
-  "Access denied: email domain is not authorized. Only @iruzlabs.com and @azurylabs.online are permitted.": "访问被拒绝：邮箱域名未经授权。仅允许 @iruzlabs.com 和 @azurylabs.online。",
   "Complete sign-in in your browser, then return here.": "请在浏览器中完成登录，然后返回此处。",
   "Continue with Google Workspace": "通过 Google Workspace 继续",
   "Continue with Microsoft 365": "通过 Microsoft 365 继续",
-  "Or direct corporate access": "或直接企业邮箱访问",
+  "Direct sign-in (development)": "直接登录（开发用）",
+  "Sign in with your corporate account first": "请先用企业账号登录",
+  "Direct sign-in is turned off; sign in with Google or Microsoft": "直接登录已关闭，请用 Google 或 Microsoft 登录",
+  "Enter your corporate email": "请输入企业邮箱",
   "Corporate email": "企业邮箱",
   "Identity Provider": "身份提供商",
   "Sign in to Atenea": "登录 Atenea",
@@ -1255,6 +1257,7 @@ var ZH = {
   "Some folders are not shown.": "还有一些文件夹没有显示。"
 };
 var HOST_ERRORS = [
+  [/^Only accounts from (.+) can sign in$/, "只有 $1 的账号可以登录"],
   [/^Model (.+) is not available\. Available: (.*)$/, "模型 $1 不可用。可用的：$2"],
   [/^The API key for (.+) is set outside DS Bot and cannot be changed here$/, "$1 的 API key 是在 DS Bot 之外设置的，这里改不了"],
   [/^(.+) takes no API key here$/, "$1 不能在这里填 API key"],
@@ -7712,7 +7715,7 @@ function SecretCard({ sessionId, bot, request, roster, actions, inline = false }
     busyRef.current = true;
     setBusy(true);
     setError("");
-    return Promise.resolve().then(make).then(() => setValue(""), (failure) => setError(failure?.message ?? String(failure))).finally(() => {
+    return Promise.resolve().then(make).then(() => setValue(""), (failure2) => setError(failure2?.message ?? String(failure2))).finally(() => {
       busyRef.current = false;
       setBusy(false);
     });
@@ -10770,11 +10773,11 @@ function UpdateButton({ useUpdate, actions }) {
   const toggle = () => setOpen((value) => !value);
   const start = () => {
     setError("");
-    void actions.installUpdate().catch((failure) => setError(hostText(failure?.message ?? String(failure))));
+    void actions.installUpdate().catch((failure2) => setError(hostText(failure2?.message ?? String(failure2))));
   };
   const startDsh = () => {
     setDshError("");
-    void actions.installDshUpdate().catch((failure) => setDshError(hostText(failure?.message ?? String(failure))));
+    void actions.installDshUpdate().catch((failure2) => setDshError(hostText(failure2?.message ?? String(failure2))));
   };
   const label = phase === "installing" ? t("Updating Atenea…") : dshPhase === "installing" ? t("Updating DSH…") : phase === "installed" ? t("Atenea {version} is installed. Restart DSH to use it.", { version: update.installed ?? update.latest }) : phase === "updated" ? t("Atenea {version} is installed.", { version: update.installed ?? update.latest }) : dshPhase === "installed" ? t("Restart DSH to start using DSH {version}.", { version: dsh.installed ?? dsh.verified }) : update?.available ? t("Atenea {version} is available", { version: update.latest }) : t("DSH {version} is available", { version: dsh?.verified });
   const message = error || (phase === "failed" ? update.error : "");
@@ -12590,8 +12593,8 @@ function ModelChoiceDock({ sessionId, useRoster, actions }) {
   const pick2 = (ref) => {
     setBusy(ref);
     setError("");
-    void Promise.resolve(actions.updateBot(bot.id, { model: ref })).catch((failure) => {
-      setError(failure?.message ?? String(failure));
+    void Promise.resolve(actions.updateBot(bot.id, { model: ref })).catch((failure2) => {
+      setError(failure2?.message ?? String(failure2));
       void actions.refreshModels?.();
     }).finally(() => setBusy(""));
   };
@@ -12649,7 +12652,7 @@ function ModelKeyCard({ model, actions, onSaved }) {
     void Promise.resolve(actions.setProviderKey(model.provider, value)).then(() => {
       setValue("");
       onSaved?.();
-    }, (failure) => setError(hostText(failure?.message ?? String(failure)))).finally(() => setBusy(false));
+    }, (failure2) => setError(hostText(failure2?.message ?? String(failure2)))).finally(() => setBusy(false));
   };
   const official = model.provider === "deepseek-official";
   return (0, import_react25.createElement)(
@@ -12874,7 +12877,7 @@ function FailureCell({ node, sessionId, useRoster, useTurnClock, actions }) {
     }
     if (model === bot.model) return;
     setError("");
-    void Promise.resolve(actions.updateBot(bot.id, { model })).catch((failure) => setError(hostText(failure?.message ?? String(failure))));
+    void Promise.resolve(actions.updateBot(bot.id, { model })).catch((failure2) => setError(hostText(failure2?.message ?? String(failure2))));
   };
   const listed = accountModel(roster);
   (0, import_react26.useEffect)(() => {
@@ -12929,9 +12932,9 @@ function FailureCell({ node, sessionId, useRoster, useTurnClock, actions }) {
   const resume = () => {
     setRetry("busy");
     setError("");
-    void Promise.resolve(actions.resume(bot.id)).then(() => setRetry("sent"), (failure) => {
+    void Promise.resolve(actions.resume(bot.id)).then(() => setRetry("sent"), (failure2) => {
       setRetry("idle");
-      setError(hostText(failure?.message ?? String(failure)));
+      setError(hostText(failure2?.message ?? String(failure2)));
     });
   };
   const button = (fix, primary) => {
@@ -13206,7 +13209,7 @@ function FolderMenu({ value, group = false, team = false, actions, run: run2, on
     void Promise.resolve(actions.folderList(path)).then((next) => {
       setListing(next);
       setView("browse");
-    }).catch((failure) => setProblem(failure?.message ?? String(failure)));
+    }).catch((failure2) => setProblem(failure2?.message ?? String(failure2)));
   };
   const pickNative = () => {
     close();
@@ -13480,8 +13483,8 @@ function TaskForm({ roster, actions, start, onDone, onCancel }) {
       setBusy(false);
       return;
     }
-    void actions.scheduleCreate({ target, title, prompt, when: when3 }).then(onDone, (failure) => {
-      setError(hostText(failure?.message ?? String(failure)));
+    void actions.scheduleCreate({ target, title, prompt, when: when3 }).then(onDone, (failure2) => {
+      setError(hostText(failure2?.message ?? String(failure2)));
       setBusy(false);
     });
   };
@@ -13728,15 +13731,15 @@ function CapabilityForm({ draft, setDraft, items, actions, onClose }) {
         payload.headers = parseMap(draft.headersText, t("Headers"));
       } else if (draft.kind === "skill") payload.content = draft.content;
       else payload.items = draft.items;
-    } catch (failure) {
-      setError(failure?.message ?? String(failure));
+    } catch (failure2) {
+      setError(failure2?.message ?? String(failure2));
       return;
     }
     try {
       await actions.saveCapability(payload);
       onClose();
-    } catch (failure) {
-      setError(failure?.message ?? String(failure));
+    } catch (failure2) {
+      setError(failure2?.message ?? String(failure2));
     }
   };
   const available = items.filter((item) => item.name !== draft.name && ["mcp", "skill"].includes(item.kind));
@@ -13929,8 +13932,8 @@ async function importPhotos(photos, actions) {
       imported.push(...result?.imported ?? []);
       duplicates.push(...result?.duplicates ?? []);
       failed.push(...result?.failed ?? []);
-    } catch (failure) {
-      failed.push(...chunk.map((photo) => ({ name: photo.name, message: failure?.message ?? String(failure) })));
+    } catch (failure2) {
+      failed.push(...chunk.map((photo) => ({ name: photo.name, message: failure2?.message ?? String(failure2) })));
     }
   }
   return { imported, duplicates, failed };
@@ -13954,8 +13957,8 @@ function AvatarLibraryPanel({ actions, onPick }) {
       setItems((previous) => append ? [...previous ?? [], ...page.items] : page.items);
       setTotal(page.total);
       setOffset(page.next);
-    } catch (failure) {
-      setError(failure?.message ?? String(failure));
+    } catch (failure2) {
+      setError(failure2?.message ?? String(failure2));
     }
   }, [actions]);
   (0, import_react31.useEffect)(() => {
@@ -13971,8 +13974,8 @@ function AvatarLibraryPanel({ actions, onPick }) {
     for (const file of files) {
       try {
         photos.push({ name: file.name, image: await avatarImage(file) });
-      } catch (failure) {
-        failed.push({ name: file.name, message: failure?.message ?? String(failure) });
+      } catch (failure2) {
+        failed.push({ name: file.name, message: failure2?.message ?? String(failure2) });
       }
     }
     const result = await importPhotos(photos, actions);
@@ -13986,8 +13989,8 @@ function AvatarLibraryPanel({ actions, onPick }) {
     try {
       await actions.deleteAvatar(entry.id);
       await load();
-    } catch (failure) {
-      setError(failure?.message ?? String(failure));
+    } catch (failure2) {
+      setError(failure2?.message ?? String(failure2));
     } finally {
       setBusy(false);
     }
@@ -14367,8 +14370,8 @@ function useMemoryView(id, actions) {
       if (!alive.current || ticket !== latest.current) return;
       show2(next);
       if (next.summarizing) timer.current = setTimeout(() => void load({ summarize: flags.summarize || flags.regenerate }), POLL_MS2);
-    } catch (failure) {
-      if (alive.current && ticket === latest.current) setError(failure?.message ?? String(failure));
+    } catch (failure2) {
+      if (alive.current && ticket === latest.current) setError(failure2?.message ?? String(failure2));
     }
   }, [id]);
   (0, import_react32.useEffect)(() => {
@@ -14443,8 +14446,8 @@ function MemoryDialog({ owner, actions, leaving = false }) {
     try {
       show2(await actions.memoryForget(owner.id, entry));
       return true;
-    } catch (failure) {
-      setAnswer({ asked: entry.text, error: failure?.message ?? String(failure) });
+    } catch (failure2) {
+      setAnswer({ asked: entry.text, error: failure2?.message ?? String(failure2) });
       return false;
     }
   };
@@ -14452,8 +14455,8 @@ function MemoryDialog({ owner, actions, leaving = false }) {
     try {
       show2(await actions.memoryRestore(owner.id, row.id));
       return true;
-    } catch (failure) {
-      setAnswer({ asked: row.text, error: failure?.message ?? String(failure) });
+    } catch (failure2) {
+      setAnswer({ asked: row.text, error: failure2?.message ?? String(failure2) });
       return false;
     }
   };
@@ -14468,8 +14471,8 @@ function MemoryDialog({ owner, actions, leaving = false }) {
       setAnswer({ asked, reply: result.reply, changes: result.changes });
       show2(result.view);
       if (result.changes.some((change) => change.ok)) void load({ summarize: page === "summary" });
-    } catch (failure) {
-      setAnswer({ asked, error: failure?.message ?? String(failure) });
+    } catch (failure2) {
+      setAnswer({ asked, error: failure2?.message ?? String(failure2) });
     }
     inputRef.current?.focus();
   };
@@ -15007,15 +15010,15 @@ function CreateBot({ roster, actions, start, brief = "", onBack, canGoBack, onCr
     try {
       const bot = await actions.createBot(createPayload({ name: finalName, look, image, model, effort, brief }));
       onCreated(bot);
-    } catch (failure) {
-      setError(failure?.message ?? String(failure));
+    } catch (failure2) {
+      setError(failure2?.message ?? String(failure2));
       setBusy(false);
     }
   };
   const upload = (file) => {
     if (!file) return;
     setError("");
-    avatarImage(file).then(setImage, (failure) => setError(failure?.message ?? String(failure)));
+    avatarImage(file).then(setImage, (failure2) => setError(failure2?.message ?? String(failure2)));
   };
   const previewLook = image ? { ...look, image } : look;
   const card = (0, import_react34.createElement)(
@@ -15151,8 +15154,8 @@ function NewChat({ mode, roster, actions }) {
     setBusy(true);
     try {
       await task();
-    } catch (failure) {
-      setError(failure?.message ?? String(failure));
+    } catch (failure2) {
+      setError(failure2?.message ?? String(failure2));
     } finally {
       setBusy(false);
     }
@@ -16796,9 +16799,9 @@ function UsagePage({ roster, actions, focusId }) {
         (0, import_react41.startTransition)(() => setView(value));
         setError("");
         timer = setTimeout(load, value.scanning ? 3e3 : 2e4);
-      } catch (failure) {
+      } catch (failure2) {
         if (stopped) return;
-        setError(failure?.message ?? String(failure));
+        setError(failure2?.message ?? String(failure2));
         timer = setTimeout(load, 1e4);
       }
     };
@@ -17235,7 +17238,7 @@ function ConnectorRow({ connector, actions }) {
     setError(null);
     return task.then(() => {
       after?.();
-    }, (failure) => setError(failure?.message ?? String(failure))).finally(() => setBusy(false));
+    }, (failure2) => setError(failure2?.message ?? String(failure2))).finally(() => setBusy(false));
   };
   const connect = () => {
     if (busy || token.trim() === "") return;
@@ -17862,8 +17865,8 @@ var PRESETS = [
   { id: "openai", label: "OpenAI", provider: "openai", name: "OpenAI", baseURL: "https://api.openai.com/v1", api: "openai-completions", key: "", hint: "Official OpenAI API key" },
   { id: "deepseek", label: "DeepSeek API", provider: "deepseek", name: "DeepSeek API", baseURL: "https://api.deepseek.com/v1", api: "openai-completions", key: "", hint: "Official DeepSeek API key" }
 ];
-var translated = (promise) => Promise.resolve(promise).catch((failure) => {
-  throw new Error(hostText(failure?.message ?? String(failure)));
+var translated = (promise) => Promise.resolve(promise).catch((failure2) => {
+  throw new Error(hostText(failure2?.message ?? String(failure2)));
 });
 function ProvidersPage({ actions, run: run2, Section }) {
   const [view, setView] = (0, import_react46.useState)(null);
@@ -18494,8 +18497,8 @@ function SettingsDialog({ page, id, roster, actions, useUpdate, leaving = false 
   const run2 = (promise) => Promise.resolve(promise).then(() => {
     setError("");
     return true;
-  }).catch((failure) => {
-    setError(failure?.message ?? String(failure));
+  }).catch((failure2) => {
+    setError(failure2?.message ?? String(failure2));
     return false;
   });
   const bot = page === "bots" && id ? roster.byId[id] : void 0;
@@ -19202,8 +19205,8 @@ function DetailsDrawer({ sessionId, startRenaming, startTab, hasStrip, roster, a
   const run2 = (promise) => Promise.resolve(promise).then(() => {
     setError("");
     return true;
-  }).catch((failure) => {
-    setError(failure?.message ?? String(failure));
+  }).catch((failure2) => {
+    setError(failure2?.message ?? String(failure2));
     return false;
   });
   const share = () => {
@@ -20366,13 +20369,15 @@ var MicrosoftMark = () => (0, import_react52.createElement)(
   { width: 18, height: 18, viewBox: "0 0 24 24", fill: "currentColor", "aria-hidden": true },
   (0, import_react52.createElement)("path", { d: "M2 2h9v9H2V2zm11 0h9v9h-9V2zM2 13h9v9H2v-9zm11 0h9v9h-9v-9z" })
 );
+var failure = (err) => hostText(err?.message ?? "") || t("Authentication failed");
 function AuthGate({ roster, actions }) {
   const [busyProvider, setBusyProvider] = (0, import_react52.useState)(null);
   const [directEmail, setDirectEmail] = (0, import_react52.useState)("");
   const [directProvider, setDirectProvider] = (0, import_react52.useState)("google");
   const [error, setError] = (0, import_react52.useState)("");
   const [info, setInfo] = (0, import_react52.useState)("");
-  const domains = roster.auth?.domains ?? ["iruzlabs.com", "azurylabs.online"];
+  const auth = roster.auth ?? {};
+  const domains = auth.domains ?? [];
   const startOAuth = async (provider) => {
     setError("");
     setInfo("");
@@ -20380,15 +20385,15 @@ function AuthGate({ roster, actions }) {
     try {
       const res = await actions.authStart(provider);
       if (res?.authUrl) {
-        window.open(res.authUrl, "_blank");
+        window.open(res.authUrl, "_blank", "noopener,noreferrer");
         setInfo(t("Waiting for authentication in your browser…"));
-      } else if (res?.configured === false) {
+      } else {
         setBusyProvider(null);
-        setInfo(t("OAuth client ID not configured. Use direct corporate sign-in below."));
+        setInfo(t("This sign-in is not set up on this computer. Ask your administrator."));
       }
     } catch (err) {
       setBusyProvider(null);
-      setError(err?.message || t("Authentication failed"));
+      setError(failure(err));
     }
   };
   const cancelOAuth = async () => {
@@ -20400,22 +20405,17 @@ function AuthGate({ roster, actions }) {
     }
   };
   const submitDirect = async (e) => {
-    if (e) e.preventDefault();
+    e?.preventDefault();
     setError("");
-    const email = directEmail.trim().toLowerCase();
+    const email = directEmail.trim();
     if (!email) {
       setError(t("Please enter your corporate email"));
-      return;
-    }
-    const isAllowed = domains.some((d) => email.endsWith(`@${d.toLowerCase()}`) || email.endsWith(`.${d.toLowerCase()}`));
-    if (!isAllowed) {
-      setError(t("Access denied: email domain is not authorized. Only @iruzlabs.com and @azurylabs.online are permitted."));
       return;
     }
     try {
       await actions.authDevLogin({ email, provider: directProvider });
     } catch (err) {
-      setError(err?.message || t("Authentication failed"));
+      setError(failure(err));
     }
   };
   return (0, import_react52.createElement)(
@@ -20429,7 +20429,7 @@ function AuthGate({ roster, actions }) {
       (0, import_react52.createElement)("h1", { className: "bt-auth-title" }, "Atenea"),
       (0, import_react52.createElement)("p", { className: "bt-auth-sub" }, t("Corporate AI Workspace · Iruz Labs")),
       (0, import_react52.createElement)("span", { className: "bt-auth-badge" }, t("Exclusive Internal Access")),
-      (0, import_react52.createElement)(
+      domains.length > 0 ? (0, import_react52.createElement)(
         "div",
         { className: "bt-auth-domains" },
         (0, import_react52.createElement)("div", { className: "bt-auth-domains-label" }, t("Authorized corporate accounts only:")),
@@ -20438,7 +20438,7 @@ function AuthGate({ roster, actions }) {
           { className: "bt-auth-domains-chips" },
           domains.map((d) => (0, import_react52.createElement)("span", { key: d, className: "bt-auth-chip" }, `@${d}`))
         )
-      ),
+      ) : null,
       error ? (0, import_react52.createElement)("div", { className: "bt-auth-alert bt-auth-alert-error", role: "alert" }, error) : null,
       info ? (0, import_react52.createElement)("div", { className: "bt-auth-alert bt-auth-alert-info", role: "status" }, info) : null,
       busyProvider ? (0, import_react52.createElement)(
@@ -20450,45 +20450,53 @@ function AuthGate({ roster, actions }) {
       ) : (0, import_react52.createElement)(
         "div",
         { className: "bt-auth-actions" },
-        (0, import_react52.createElement)("button", {
-          type: "button",
-          className: "bt-auth-btn",
-          onClick: () => startOAuth("google")
-        }, (0, import_react52.createElement)(GoogleMark), (0, import_react52.createElement)("span", null, t("Continue with Google Workspace"))),
-        (0, import_react52.createElement)("button", {
-          type: "button",
-          className: "bt-auth-btn",
-          onClick: () => startOAuth("microsoft")
-        }, (0, import_react52.createElement)(MicrosoftMark), (0, import_react52.createElement)("span", null, t("Continue with Microsoft 365")))
-      ),
-      (0, import_react52.createElement)("div", { className: "bt-auth-divider" }, (0, import_react52.createElement)("span", null, t("Or direct corporate access"))),
-      (0, import_react52.createElement)(
-        "form",
-        { className: "bt-auth-direct", onSubmit: submitDirect },
-        (0, import_react52.createElement)("input", {
-          className: "bt-auth-input",
-          type: "email",
-          value: directEmail,
-          placeholder: "nombre@iruzlabs.com",
-          onChange: (e) => setDirectEmail(e.target.value),
-          required: true,
-          "aria-label": t("Corporate email")
-        }),
         (0, import_react52.createElement)(
-          "select",
-          {
-            className: "bt-auth-select",
-            value: directProvider,
-            onChange: (e) => setDirectProvider(e.target.value),
-            "aria-label": t("Identity Provider")
-          },
-          (0, import_react52.createElement)("option", { value: "google" }, "Google Workspace"),
-          (0, import_react52.createElement)("option", { value: "microsoft" }, "Microsoft 365")
+          "button",
+          { type: "button", className: "bt-auth-btn", onClick: () => startOAuth("google") },
+          (0, import_react52.createElement)(GoogleMark),
+          (0, import_react52.createElement)("span", null, t("Continue with Google Workspace"))
         ),
-        (0, import_react52.createElement)("button", { type: "submit", className: "bt-auth-submit" }, t("Sign in to Atenea"))
-      )
+        (0, import_react52.createElement)(
+          "button",
+          { type: "button", className: "bt-auth-btn", onClick: () => startOAuth("microsoft") },
+          (0, import_react52.createElement)(MicrosoftMark),
+          (0, import_react52.createElement)("span", null, t("Continue with Microsoft 365"))
+        )
+      ),
+      auth.devLogin ? (0, import_react52.createElement)(DirectSignIn, { domains, directEmail, setDirectEmail, directProvider, setDirectProvider, submitDirect }) : null
     )
   );
+}
+function DirectSignIn({ domains, directEmail, setDirectEmail, directProvider, setDirectProvider, submitDirect }) {
+  return [
+    (0, import_react52.createElement)("div", { key: "divider", className: "bt-auth-divider" }, (0, import_react52.createElement)("span", null, t("Direct sign-in (development)"))),
+    (0, import_react52.createElement)(
+      "form",
+      { key: "form", className: "bt-auth-direct", onSubmit: submitDirect },
+      (0, import_react52.createElement)("input", {
+        className: "bt-auth-input",
+        type: "email",
+        value: directEmail,
+        placeholder: domains[0] ? `nombre@${domains[0]}` : "",
+        onChange: (e) => setDirectEmail(e.target.value),
+        required: true,
+        autoComplete: "email",
+        "aria-label": t("Corporate email")
+      }),
+      (0, import_react52.createElement)(
+        "select",
+        {
+          className: "bt-auth-select",
+          value: directProvider,
+          onChange: (e) => setDirectProvider(e.target.value),
+          "aria-label": t("Identity Provider")
+        },
+        (0, import_react52.createElement)("option", { value: "google" }, "Google Workspace"),
+        (0, import_react52.createElement)("option", { value: "microsoft" }, "Microsoft 365")
+      ),
+      (0, import_react52.createElement)("button", { type: "submit", className: "bt-auth-submit" }, t("Sign in to Atenea"))
+    )
+  ];
 }
 
 // src/client/overlays.js
@@ -21619,8 +21627,8 @@ function ProposalCard({ proposal, initialError = "", onFailure, onResolved, acti
     busyRef.current = true;
     setBusy(true);
     setError("");
-    void Promise.resolve().then(() => actions.learningAnswer(proposal.id, approve)).then(() => onResolved(proposal.id), (failure) => {
-      const message = failure?.message ?? String(failure);
+    void Promise.resolve().then(() => actions.learningAnswer(proposal.id, approve)).then(() => onResolved(proposal.id), (failure2) => {
+      const message = failure2?.message ?? String(failure2);
       setError(message);
       onFailure(proposal, message);
     }).finally(() => {

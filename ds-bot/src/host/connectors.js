@@ -4,7 +4,7 @@
 //
 // Tokens and credentials are stored securely in secrets, redacted in logs, and kept out of
 // ordinary Bot shells.
-import { writeFileSync } from 'node:fs'
+import { chmodSync, existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 
 export const GITHUB = 'github'
@@ -19,7 +19,10 @@ export const GOOGLE_WORKSPACE_SECRET = 'GOOGLE_WORKSPACE_CREDENTIALS'
 const MCP_CLIENT = '@deepseek-ai/dsh-mcp-client'
 const CHECK_TIMEOUT_MS = 15_000
 const INSECURE_GITHUB = 'GitHub addresses must start with https://'
+const GOOGLE_CREDENTIALS_FILE = 'google-workspace-credentials.json'
 
+// Exact versions: `npx -y name` runs whatever release is newest at mount time, with the
+// connector's credentials in its environment. Raise a version only after reviewing it.
 const DEFAULTS = {
   [GITHUB]: {
     url: 'https://api.githubcopilot.com/mcp/',
@@ -29,16 +32,33 @@ const DEFAULTS = {
   [LINEAR]: {
     api: 'https://api.linear.app/graphql',
     command: 'npx',
-    args: ['-y', '@emmett.deen/linear-mcp-server'],
+    args: ['-y', '@emmett.deen/linear-mcp-server@1.0.0'],
   },
   [GRAFANA]: {
     command: 'npx',
-    args: ['-y', '@leval/mcp-grafana'],
+    args: ['-y', '@leval/mcp-grafana@1.1.7'],
   },
   [GOOGLE_WORKSPACE]: {
     command: 'npx',
-    args: ['-y', 'google-workspace-mcp'],
+    args: ['-y', 'google-workspace-mcp@2.3.6'],
   },
+}
+
+const LOOPBACK = new Set(['localhost', '127.0.0.1', '[::1]'])
+
+// A Grafana base address the token may be sent to: https, or http on this computer only.
+export function grafanaBase(url) {
+  const text = String(url ?? '').trim().replace(/\/+$/, '')
+  let parsed
+  try {
+    parsed = new URL(text)
+  } catch {
+    throw new Error('Enter a valid Grafana URL (starting with https://)')
+  }
+  const local = parsed.protocol === 'http:' && LOOPBACK.has(parsed.hostname)
+  if (parsed.protocol !== 'https:' && !local) throw new Error('Grafana addresses must start with https://')
+  if (parsed.username || parsed.password) throw new Error('Leave the user name and password out of the Grafana URL')
+  return text
 }
 
 export async function signInGithub(token, { api = DEFAULTS[GITHUB].api, fetch: request = fetch } = {}) {
@@ -85,8 +105,7 @@ export async function signInLinear(token, { api = DEFAULTS[LINEAR].api, fetch: r
 }
 
 export async function signInGrafana(token, { url, fetch: request = fetch } = {}) {
-  const base = String(url ?? '').trim().replace(/\/$/, '')
-  if (!base || !/^https?:\/\//i.test(base)) throw new Error('Enter a valid Grafana URL (starting with http:// or https://)')
+  const base = grafanaBase(url)
   let response
   try {
     response = await request(`${base}/api/org`, {
@@ -103,27 +122,30 @@ export async function signInGrafana(token, { url, fetch: request = fetch } = {})
   return { login }
 }
 
+// The credentials themselves, not their path, go into the secrets store: a path would
+// leave them in a file outside it, readable by whatever else runs as the user.
 export async function signInGoogleWorkspace(credentialsInput) {
   const trimmed = String(credentialsInput ?? '').trim()
   if (!trimmed) throw new Error('Paste Google Workspace OAuth credentials JSON or provide a valid path')
   let parsed = null
-  if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
+  if (trimmed.startsWith('{')) {
     try {
       parsed = JSON.parse(trimmed)
     } catch {
       throw new Error('Invalid JSON format for Google Workspace credentials')
     }
   } else {
-    const { existsSync, readFileSync } = await import('node:fs')
-    if (existsSync(trimmed)) {
-      try {
-        parsed = JSON.parse(readFileSync(trimmed, 'utf8'))
-      } catch {
-        throw new Error('Could not read credentials JSON from the provided path')
-      }
-    } else {
-      throw new Error('The credentials file does not exist. Provide valid JSON or an existing file path.')
+    if (!trimmed.toLowerCase().endsWith('.json') || !existsSync(trimmed)) {
+      throw new Error('The credentials file does not exist. Provide valid JSON or an existing .json file path.')
     }
+    try {
+      parsed = JSON.parse(readFileSync(trimmed, 'utf8'))
+    } catch {
+      throw new Error('Could not read credentials JSON from the provided path')
+    }
+  }
+  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new Error('Google Workspace credentials must be a JSON object')
   }
   const root = parsed.installed ?? parsed.web ?? parsed
   const clientId = root.client_id
@@ -133,7 +155,20 @@ export async function signInGoogleWorkspace(credentialsInput) {
     throw new Error('Google Workspace credentials must contain client_id or client_email')
   }
   const login = projectId ? `Project: ${projectId}` : clientEmail ?? 'OAuth App'
-  return { login, credentialsJson: JSON.stringify(parsed) }
+  const credentialsJson = JSON.stringify(parsed)
+  return { login, credentialsJson, secret: credentialsJson }
+}
+
+// The MCP server reads its credentials from a file; it is rewritten only when they
+// change, kept private to the user, and removed when the connector is.
+function writeGoogleCredentials(home, json) {
+  const target = join(home, GOOGLE_CREDENTIALS_FILE)
+  let current = null
+  try { current = readFileSync(target, 'utf8') } catch {}
+  if (current !== json) writeFileSync(target, json, { mode: 0o600 })
+  // `mode` only applies when the file is created.
+  try { chmodSync(target, 0o600) } catch {}
+  return target
 }
 
 // Backward-compatible alias for existing tests
@@ -168,9 +203,9 @@ const CONNECTOR_DEFS = {
     mountConfig: (token, options) => ({
       transport: 'stdio',
       serverName: LINEAR,
-      command: options.command ?? 'npx',
-      args: options.args ?? ['-y', '@emmett.deen/linear-mcp-server'],
-      env: { LINEAR_API_KEY: token, ...(options.env ?? {}) },
+      command: options.command,
+      args: options.args,
+      env: { LINEAR_API_KEY: token, ...options.env },
       failOnStartupError: true,
     }),
   },
@@ -179,25 +214,21 @@ const CONNECTOR_DEFS = {
     name: 'Grafana Cloud',
     secret: GRAFANA_SECRET,
     purpose: 'Grafana connector',
-    validate: (options, stateEntry, body) => {
+    address: (options, stateEntry, body) => {
       const url = body?.url ?? stateEntry?.url ?? options?.url
       if (!url) throw new Error('Enter the Grafana instance URL')
+      return grafanaBase(url)
     },
-    signIn: async (token, options, body) => {
-      const url = body?.url ?? options?.url
-      return signInGrafana(token, { url })
-    },
-    mountConfig: (token, options, stateEntry) => {
-      const url = stateEntry?.url ?? options.url ?? 'https://grafana.net'
-      return {
-        transport: 'stdio',
-        serverName: GRAFANA,
-        command: options.command ?? 'npx',
-        args: options.args ?? ['-y', '@leval/mcp-grafana'],
-        env: { GRAFANA_URL: url, GRAFANA_SERVICE_ACCOUNT_TOKEN: token, ...(options.env ?? {}) },
-        failOnStartupError: true,
-      }
-    },
+    validate: (options, stateEntry, body) => { CONNECTOR_DEFS[GRAFANA].address(options, stateEntry, body) },
+    signIn: async (token, options, body) => signInGrafana(token, { url: body?.url ?? options?.url }),
+    mountConfig: (token, options, stateEntry) => ({
+      transport: 'stdio',
+      serverName: GRAFANA,
+      command: options.command,
+      args: options.args,
+      env: { GRAFANA_URL: CONNECTOR_DEFS[GRAFANA].address(options, stateEntry), GRAFANA_SERVICE_ACCOUNT_TOKEN: token, ...options.env },
+      failOnStartupError: true,
+    }),
   },
   [GOOGLE_WORKSPACE]: {
     id: GOOGLE_WORKSPACE,
@@ -205,23 +236,17 @@ const CONNECTOR_DEFS = {
     secret: GOOGLE_WORKSPACE_SECRET,
     purpose: 'Google Workspace connector',
     validate: () => {},
-    signIn: async (token) => signInGoogleWorkspace(token),
-    mountConfig: (token, options, stateEntry, rt) => {
-      let credsPath = token
-      if (token.startsWith('{')) {
-        const target = join(rt.home, 'google-workspace-credentials.json')
-        writeFileSync(target, token, { mode: 0o600 })
-        credsPath = target
-      }
-      return {
-        transport: 'stdio',
-        serverName: 'google_workspace',
-        command: options.command ?? 'npx',
-        args: options.args ?? ['-y', 'google-workspace-mcp'],
-        env: { GOOGLE_APPLICATION_CREDENTIALS: credsPath, ...(options.env ?? {}) },
-        failOnStartupError: true,
-      }
-    },
+    signIn: async token => signInGoogleWorkspace(token),
+    // A secret saved by an earlier version may still be a path to the file.
+    mountConfig: (token, options, stateEntry, rt) => ({
+      transport: 'stdio',
+      serverName: 'google_workspace',
+      command: options.command,
+      args: options.args,
+      env: { GOOGLE_APPLICATION_CREDENTIALS: token.startsWith('{') ? writeGoogleCredentials(rt.home, token) : token, ...options.env },
+      failOnStartupError: true,
+    }),
+    forget: rt => rmSync(join(rt.home, GOOGLE_CREDENTIALS_FILE), { force: true }),
   },
 }
 
@@ -256,6 +281,14 @@ export function install(rt) {
     for (const id of list) await unmountOne(id)
   }
 
+  const forget = (def) => {
+    try {
+      def.forget?.(rt)
+    } catch (error) {
+      rt.warn('ds-bot: %s connector could not remove its files: %s', def.name, error?.message ?? error)
+    }
+  }
+
   const reason = (error) => {
     const text = [error, error?.cause].filter(Boolean).map(part => String(part?.message ?? part)).join(': ')
     return rt.redactSecrets(text || 'error').slice(0, 300)
@@ -277,6 +310,7 @@ export function install(rt) {
     if (!force && current !== undefined && current.token === token && (current.url ?? null) === currentUrl) return
     await unmountOne(id)
     if (token === undefined) {
+      forget(def)
       statuses.set(id, { state: 'off' })
       return
     }
@@ -348,13 +382,14 @@ export function install(rt) {
       if (token === '') throw new Error('Paste a token first')
       const options = getOptions(body.id)
       def.validate(options, state.connectors?.[body.id], body)
+      const url = def.address?.(options, state.connectors?.[body.id], body)
       await rt.loadSecrets()
       const kept = rt.secretValue(def.secret) !== undefined
-      const { login } = await def.signIn(token, options, body)
-      await rt.secretEndpoint('secret-set', { name: def.secret, value: token, purpose: def.purpose, ...(kept ? {} : { scope: [] }) })
+      const { login, secret = token } = await def.signIn(token, options, body)
+      await rt.secretEndpoint('secret-set', { name: def.secret, value: secret, purpose: def.purpose, ...(kept ? {} : { scope: [] }) })
       state.connectors = {
         ...state.connectors,
-        [body.id]: { login, connectedAt: Date.now(), ...(body.url ? { url: String(body.url).trim() } : {}) },
+        [body.id]: { login, connectedAt: Date.now(), ...(url ? { url } : {}) },
       }
       await rt.save()
       await sync(false, body.id)
@@ -364,6 +399,7 @@ export function install(rt) {
       const def = known(body.id)
       await rt.loadSecrets()
       if (rt.secretValue(def.secret) !== undefined) await rt.secretEndpoint('secret-delete', { name: def.secret })
+      forget(def)
       if (state.connectors?.[body.id] !== undefined) {
         delete state.connectors[body.id]
         await rt.save()

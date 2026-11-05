@@ -58,11 +58,19 @@ export function install(rt) {
   async function deliver({ fromId, toId, sessionId, text, role, replyTo, roomId, audience, note, exchangeId = randomUUID(), steer = false, deferred = false, resumed = false, retried = false, resent = false, merged = false, askedBy, fromRoomId, files = [], length, work }) {
     // No Bot starts work behind the corporate sign-in (auth.js): a greeting, a resumed
     // turn or a group round waits here, before any state changes, until someone signs in.
+    // A shared server has no such sign-in: each request carries its own identity
+    // (identity.js) and is refused without one, so a request context without an identity
+    // starts nothing, while Bot-to-Bot and resumed work, which run outside any request,
+    // go on.
     await rt.whenSignedIn?.()
+    if (rt.multiuser && rt.requestContext?.() !== undefined && rt.viewer?.() === undefined) {
+      throw Object.assign(new Error('Sign in to Atenea first'), { code: 'bot/auth-required' })
+    }
     const from = rt.botOf(fromId)
     const to = rt.botOf(toId)
     if (to === undefined) throw new Error(`Unknown Bot ${toId}`)
-    const fromName = from?.name ?? 'You'
+    // On a shared server what a person sends carries their name, not 'You'.
+    const fromName = from?.name ?? rt.actorName?.() ?? 'You'
     const room = rt.roomOf(roomId)
     const asker = work === undefined ? undefined : rt.botOf(state.works?.[work]?.from)?.name
     // Session events reject `undefined` members, so optional fields are omitted instead.

@@ -53,7 +53,9 @@ export function install(rt) {
     rooms: Object.values(state.rooms).map(({ log, seen, paused, sessions, segments, parts: ownParts, ...room }) => {
       const parts = [...Object.values(sessions ?? {}), ...Object.values(segments ?? {}).flat().map(segment => segment.sessionId), ...(ownParts ?? []).map(segment => segment.sessionId)]
       const last = (log ?? []).filter(line => line.kind === undefined).at(-1)
-      return { ...room, sessionId: rt.sessionOfRoom(room), ownParts: (ownParts ?? []).map(segment => segment.sessionId), parts, ...(last ? { preview: last.who === 'User' ? last.text : `${last.who}：${last.text}` } : {}) }
+      // On a shared server the preview names the person who wrote the last line.
+      const preview = last === undefined ? undefined : last.who === 'User' ? (last.author ? `${last.author}：${last.text}` : last.text) : `${last.who}：${last.text}`
+      return { ...room, sessionId: rt.sessionOfRoom(room), ownParts: (ownParts ?? []).map(segment => segment.sessionId), parts, ...(preview !== undefined ? { preview } : {}) }
     }),
     // Deleted private Bots whose folder, memory and chats stay closed to the others.
     privateArchives: rt.archivesView(),
@@ -86,6 +88,9 @@ export function install(rt) {
     readOnly: rt.readOnly() ?? null,
     auth: rt.authView?.() ?? null,
   })
+  // What the person asking is shown: on a shared server, only what they may see (access.js).
+  const shown = () => (rt.multiuser ? rt.accessView(view()) : view())
+  const revisionNow = () => (rt.multiuser ? rt.viewerRevision(state.revision) : state.revision)
   // What changes without a new revision, sent with every state answer. `learning`:
   // each Bot's pending skill proposals. `memoryNews`:
   // per Bot or group chat, its latest memory change; `memoryReviews`: memory reviews waiting or
@@ -108,12 +113,17 @@ export function install(rt) {
   // at 1 would let its stale key name a different answer.
   const liveRun = randomUUID()
   let liveSeq = 0
-  let liveCache = null
+  // One cached answer per person: on a shared server each is shown only their part.
+  const liveCaches = new Map()
   const liveAnswer = () => {
-    const value = live()
+    const value = rt.multiuser ? rt.accessLive(live()) : live()
     const json = JSON.stringify(value)
-    if (liveCache?.json === json) return liveCache
-    return liveCache = { key: `${liveRun}:${++liveSeq}`, value, json }
+    const who = rt.viewer?.()?.id ?? ''
+    const cached = liveCaches.get(who)
+    if (cached?.json === json) return cached
+    const answer = { key: `${liveRun}:${++liveSeq}`, value, json }
+    liveCaches.set(who, answer)
+    return answer
   }
   // What a host that only reads the team may still answer.
   // Updates change the dsh profile, not the team, so a reading host may run them too.
@@ -123,34 +133,36 @@ export function install(rt) {
   const SIGNED_OUT = new Set([...READS, ...AUTH_ENDPOINTS])
   SIGNED_OUT.delete('approval-answer')
 
-  async function setPrefs(body) {
+  // `prefs` is where display choices go: the team's, or on a shared server the person's
+  // own. The model new Bots start on is always the team's.
+  async function setPrefs(body, prefs = state.prefs) {
     if (body.theme !== undefined) {
       if (typeof body.theme !== 'string' || !/^[a-z][\w-]{0,31}$/.test(body.theme)) throw invalid('Unknown theme')
-      state.prefs.theme = body.theme
+      prefs.theme = body.theme
     }
     if (body.accent !== undefined) {
-      if (body.accent === null || body.accent === '') delete state.prefs.accent
-      else if (/^#[0-9a-f]{6}$/i.test(body.accent)) state.prefs.accent = body.accent
+      if (body.accent === null || body.accent === '') delete prefs.accent
+      else if (/^#[0-9a-f]{6}$/i.test(body.accent)) prefs.accent = body.accent
       else throw invalid('Accent must be a #rrggbb color')
     }
     if (body.motion !== undefined) {
-      if (body.motion === null || body.motion === 'normal') delete state.prefs.motion
-      else if (body.motion === 'quiet' || body.motion === 'lively') state.prefs.motion = body.motion
+      if (body.motion === null || body.motion === 'normal') delete prefs.motion
+      else if (body.motion === 'quiet' || body.motion === 'lively') prefs.motion = body.motion
       else throw invalid('Motion must be quiet, normal or lively')
     }
     if (body.layout !== undefined) {
-      if (body.layout === null || body.layout === 'bubble') delete state.prefs.layout
-      else if (body.layout === 'flat') state.prefs.layout = body.layout
+      if (body.layout === null || body.layout === 'bubble') delete prefs.layout
+      else if (body.layout === 'flat') prefs.layout = body.layout
       else throw invalid('Layout must be bubble or flat')
     }
     if (body.width !== undefined) {
-      if (body.width === null || body.width === 80) delete state.prefs.width
-      else if (Number.isInteger(body.width) && body.width >= 50 && body.width <= 100) state.prefs.width = body.width
+      if (body.width === null || body.width === 80) delete prefs.width
+      else if (Number.isInteger(body.width) && body.width >= 50 && body.width <= 100) prefs.width = body.width
       else throw invalid('Width must be a whole percent from 50 to 100')
     }
     if (body.flatWidth !== undefined) {
-      if (body.flatWidth === null || body.flatWidth === 100) delete state.prefs.flatWidth
-      else if (Number.isInteger(body.flatWidth) && body.flatWidth >= 50 && body.flatWidth <= 100) state.prefs.flatWidth = body.flatWidth
+      if (body.flatWidth === null || body.flatWidth === 100) delete prefs.flatWidth
+      else if (Number.isInteger(body.flatWidth) && body.flatWidth >= 50 && body.flatWidth <= 100) prefs.flatWidth = body.flatWidth
       else throw invalid('Flat text width must be a whole percent from 50 to 100')
     }
     if (body.defaultBotModel !== undefined) {
@@ -162,12 +174,12 @@ export function install(rt) {
     if (body.thinking !== undefined) {
       // A value this version does not know is ignored, not refused: the toggle
       // may grow more states later.
-      if (body.thinking === true) state.prefs.thinking = true
-      else if (body.thinking === false || body.thinking === null) delete state.prefs.thinking
+      if (body.thinking === true) prefs.thinking = true
+      else if (body.thinking === false || body.thinking === null) delete prefs.thinking
     }
     if (body.enterToSend !== undefined) {
-      if (body.enterToSend === false) state.prefs.enterToSend = false
-      else if (body.enterToSend === true || body.enterToSend === null) delete state.prefs.enterToSend
+      if (body.enterToSend === false) prefs.enterToSend = false
+      else if (body.enterToSend === true || body.enterToSend === null) delete prefs.enterToSend
     }
     return rt.save()
   }
@@ -178,7 +190,10 @@ export function install(rt) {
       await rt.refresh()
       const readOnly = rt.readOnly()
       if (readOnly !== undefined && !READS.has(endpoint)) return fail(readOnly, 'bot/read-only')
-      if (rt.authLocked?.() && !SIGNED_OUT.has(endpoint)) return fail('Sign in with your corporate account first', 'bot/auth-required')
+      if (rt.multiuser) {
+        const refused = rt.gate(endpoint, body)
+        if (refused !== undefined) return fail(refused.message, refused.code)
+      } else if (rt.authLocked?.() && !SIGNED_OUT.has(endpoint)) return fail('Sign in with your corporate account first', 'bot/auth-required')
       switch (endpoint) {
         case 'state': {
           if (typeof body.locale === 'string' && /^[a-z]{2,3}(-[\w-]+)?$/i.test(body.locale)) uiLocale = body.locale
@@ -186,11 +201,12 @@ export function install(rt) {
           await rt.catalog()
           await rt.loadSecrets()
           const answer = liveAnswer()
-          if (body.since === state.revision && (body.models === undefined || body.models === modelsKey())) {
-            if (body.live === answer.key) return ok({ revision: state.revision, unchanged: true, liveKey: answer.key })
-            return ok({ revision: state.revision, unchanged: true, liveKey: answer.key, ...answer.value })
+          const revision = revisionNow()
+          if (body.since === revision && (body.models === undefined || body.models === modelsKey())) {
+            if (body.live === answer.key) return ok({ revision, unchanged: true, liveKey: answer.key })
+            return ok({ revision, unchanged: true, liveKey: answer.key, ...answer.value })
           }
-          return ok({ ...view(), liveKey: answer.key, ...answer.value })
+          return ok({ ...shown(), liveKey: answer.key, ...answer.value })
         }
         case 'models':
           await rt.catalog({ fresh: true })
@@ -220,13 +236,19 @@ export function install(rt) {
           return ok(await rt.discoverModels(body))
         case 'provider-remove':
           return ok(await rt.removeProvider(String(body.provider ?? '')))
-        case 'duplicate-bot':
+        case 'duplicate-bot': {
           await rt.load()
-          return ok(await rt.duplicateBot(body.id))
+          const copy = await rt.duplicateBot(body.id)
+          return ok(rt.multiuser ? await rt.registerCreated(copy) : copy)
+        }
         case 'set-prefs':
           await rt.load()
-          await setPrefs(body)
-          return ok(state.prefs)
+          if (!rt.multiuser) {
+            await setPrefs(body)
+            return ok(state.prefs)
+          }
+          await setPrefs(body, rt.viewerPrefsTarget())
+          return ok(shown().prefs)
         case 'exchange': {
           await rt.load()
           const pair = new Set([body.a, body.b])
@@ -272,7 +294,7 @@ export function install(rt) {
         case 'create-bot': {
           await rt.bootstrap()
           const bot = await rt.createBot({ name: body.name, role: body.role, color: body.color, instructions: body.instructions, brief: body.brief, avatar: body.avatar, model: body.model, effort: body.effort, workDir: body.workDir })
-          return ok(bot)
+          return ok(rt.multiuser ? await rt.registerCreated(bot) : bot)
         }
         case 'update-bot':
           await rt.load()
@@ -298,18 +320,19 @@ export function install(rt) {
         case 'delete-bot':
           await rt.load()
           await rt.deleteBot(body.id)
-          return ok(view())
+          if (rt.multiuser) await rt.unregisterDeleted(String(body.id))
+          return ok(shown())
         case 'private-release':
           await rt.load()
           await rt.releaseArchive(String(body.id ?? ''))
-          return ok(view())
+          return ok(shown())
         case 'set-main':
           await rt.load()
           await rt.setMain(body.id, body.main !== false, {
             primary: body.primary === true,
             replace: typeof body.replace === 'string' ? body.replace : undefined,
           })
-          return ok(view())
+          return ok(shown())
         case 'create-room': {
           await rt.load()
           const room = await rt.createRoom({ members: Array.isArray(body.members) ? body.members : [], name: body.name, ...(typeof body.admin === 'string' ? { admin: body.admin } : {}) })
@@ -329,7 +352,7 @@ export function install(rt) {
             workDir: body.workDir,
             permission: body.permission,
           })
-          return ok({ room: view().rooms.find(entry => entry.id === room.id), changes })
+          return ok({ room: shown().rooms.find(entry => entry.id === room.id), changes })
         }
         case 'folders':
         case 'folder-pick':
@@ -359,14 +382,16 @@ export function install(rt) {
         case 'remove-agent':
           await rt.load()
           await rt.removeAgent(body.agentId)
-          return ok(view())
+          return ok(shown())
         case 'set-flags':
           await rt.load()
+          // On a shared server pins and hidden marks are each person's own.
+          if (rt.multiuser && (rt.botOf(body.id) !== undefined || rt.roomOf(body.id) !== undefined)) return ok(await rt.setViewerFlags(body.id, body))
           return ok(await rt.setFlags(body.id, body))
         case 'delete-room':
           await rt.load()
           await rt.deleteRoom(body.id)
-          return ok(view())
+          return ok(shown())
         case 'approval-answer':
           rt.answerApproval(body.id, body.choice)
           return ok(true)
@@ -383,12 +408,12 @@ export function install(rt) {
         case 'goal-draft': {
           await rt.load()
           const result = await rt.goalDraft(String(body.roomId ?? ''), body.text)
-          return result.error !== undefined ? fail(result.error, result.code ?? 'bot/refused') : ok(view())
+          return result.error !== undefined ? fail(result.error, result.code ?? 'bot/refused') : ok(shown())
         }
         case 'goal-control': {
           await rt.load()
           const result = await rt.goalControl(String(body.roomId ?? ''), body)
-          return result.error !== undefined ? fail(result.error, result.code ?? 'bot/refused') : ok(view())
+          return result.error !== undefined ? fail(result.error, result.code ?? 'bot/refused') : ok(shown())
         }
         case 'dismiss-question':
           await rt.load()
@@ -424,9 +449,11 @@ export function install(rt) {
           return ok(await rt.capabilityEndpoint(endpoint, body))
         case 'schedules':
         case 'schedule-create':
-        case 'schedule-delete':
+        case 'schedule-delete': {
           await rt.load()
-          return ok(await rt.scheduleEndpoint(endpoint, body))
+          const value = await rt.scheduleEndpoint(endpoint, body)
+          return ok(rt.multiuser ? rt.accessSchedules(value) : value)
+        }
         case 'memory-view':
         case 'memory-ask':
         case 'memory-forget':
@@ -505,8 +532,10 @@ export function install(rt) {
               : past?.roomId === undefined && past !== undefined ? rt.chatOf(past.botId)
                 : past !== undefined ? rt.sessionOfRoom(rt.roomOf(past.roomId)) : body.sessionId
           await rt.ensureCapabilities(sessionId)
+          const requestId = randomUUID()
+          rt.noteAuthor?.(requestId, rt.viewer?.())
           await ctx.sessionController.prompt({
-            requestId: randomUUID(),
+            requestId,
             sessionId,
             mode: 'queue',
             content: [{ type: 'text', text }],
@@ -627,6 +656,17 @@ export function install(rt) {
         case 'diagnostics-clear':
           await rt.diagnostics.clear()
           return ok(true)
+        // Sharing, the staff directory, claiming a Bot for SLA, and who wrote a message:
+        // only on a shared server (access.js, attribution.js).
+        case 'shares':
+        case 'share-add':
+        case 'share-remove':
+        case 'staff-search':
+        case 'claim-bot':
+        case 'author':
+        case 'authors':
+          await rt.load()
+          return ok(await rt.accessEndpoint(endpoint, body))
         default:
           return fail(`Unknown endpoint ${endpoint}`, 'bot/not-found')
       }
@@ -644,10 +684,20 @@ export function install(rt) {
     methods: ['POST'],
     requestBody: 'buffered',
     fetch: async (request) => {
+      const answer = (result, status = 200) => new Response(JSON.stringify(result), { status, headers: { 'content-type': 'application/json' } })
+      // On a shared server every call carries the gateway's signed identity; without a
+      // valid one nothing runs, not even a read.
+      const caller = rt.multiuser ? rt.identify(request) : undefined
+      if (caller?.error !== undefined) return answer(fail('Sign in to Atenea first', 'bot/auth-required'), 401)
       let body
       try { body = await request.json() } catch { body = {} }
-      const result = await handle(String(body?.endpoint ?? ''), body?.payload, request.signal)
-      return new Response(JSON.stringify(result), { status: 200, headers: { 'content-type': 'application/json' } })
+      const endpoint = String(body?.endpoint ?? '')
+      if (caller === undefined) return answer(await handle(endpoint, body?.payload, request.signal))
+      return answer(await rt.runAs(caller, async () => {
+        const result = await handle(endpoint, body?.payload, request.signal)
+        if (result.ok) rt.auditEndpoint(endpoint, body?.payload ?? {}, result.value)
+        return result
+      }))
     },
   }), 'ds-bot: api route')
 

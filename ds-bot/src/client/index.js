@@ -48,6 +48,8 @@ import { GOAL_CSS } from './goal.js'
 import { USER_MESSAGE_CSS, UserMessageCell, canDrawUserMessages } from './user-message.js'
 import { noticeApprovals } from './approval-notices.js'
 import { listedOpener } from './open-listed.js'
+import { READ_ONLY_CSS, ReadOnlyComposer, installReadOnlyComposer, watchSubmissions } from './multiuser.js'
+import { SHARING_CSS } from './sharing.js'
 
 export const inject = ['sessions', 'uiWorkspace', 'uiConversation', 'slots', 'theme', 'layout']
 
@@ -727,6 +729,30 @@ export function apply(ctx) {
   const browserTabs = browsers?.tabs ?? createSource({})
   const browserHolds = browsers?.holds ?? createSource({})
   const face = () => ({ actions, hooks: { roster, ui, activity, work, memoryNews, registry, turnClock, live, cards, heldCards, browserPages, browserTabs, browserHolds, surface, update, frame, sidebarPref } })
+  // On a shared server, what the composer sends in the shown Bot or group chat is
+  // claimed for the signed-in person, so everyone sees who wrote each message.
+  ctx.effect(() => {
+    const seen = new Set()
+    let bound = null
+    const sync = () => {
+      const snapshot = roster.getSnapshot()
+      const main = snapshot.multiuser === true ? mainView() : undefined
+      const id = main !== undefined && (snapshot.byId[main] !== undefined || snapshot.roomsById[main] !== undefined) ? main : undefined
+      if (bound?.id === id) return
+      bound?.off()
+      bound = null
+      if (id === undefined) return
+      let session
+      try { session = ctx.sessions.binding(id)?.session } catch { session = undefined }
+      // Not bound yet: the next list change tries again.
+      if (session === undefined) return
+      bound = { id, off: watchSubmissions(session, seen, requestId => void Promise.resolve(actions.claimAuthor(id, requestId)).catch(quietly('author claim'))) }
+    }
+    const offList = ctx.sessions.list.subscribe(sync)
+    const offRoster = roster.subscribe(sync)
+    sync()
+    return () => { offList(); offRoster(); bound?.off() }
+  }, 'ds-bot: author claims')
   ctx.effect(() => noticeApprovals({
     work,
     roster,
@@ -914,7 +940,7 @@ export function apply(ctx) {
     () => installCompiledStyles(SIDEBAR_CSS, 'sidebar'),
     () => installCompiledStyles(SECRET_CSS, 'secrets'),
     () => installCompiledStyles(LEARNING_CSS, 'learning'),
-    () => installCompiledStyles(MODEL_CSS + FOLDER_CSS + BOT_SETTINGS_CSS + GROUP_SETTINGS_CSS + AVATAR_LIBRARY_CSS, 'models'),
+    () => installCompiledStyles(MODEL_CSS + FOLDER_CSS + BOT_SETTINGS_CSS + GROUP_SETTINGS_CSS + AVATAR_LIBRARY_CSS + SHARING_CSS, 'models'),
     () => installCompiledStyles(USAGE_CSS, 'usage'),
     () => installCompiledStyles(SCHEDULE_CSS, 'schedules'),
     () => installCompiledStyles(FEEDBACK_CSS, 'feedback'),
@@ -984,6 +1010,9 @@ export function apply(ctx) {
       priority: BOT_PRIORITY,
       select: owner => (owner.pendingInteraction?.kind === 'question' ? owner.pendingInteraction : null),
     }, QuestionCard),
+    // On a shared server, a chat the viewer may only read shows why instead of a composer.
+    () => installCompiledStyles(READ_ONLY_CSS, 'read-only'),
+    () => ctx.slots.inject('conversation.composer', () => installReadOnlyComposer(ctx.slots, roster, ReadOnlyComposer, BOT_PRIORITY)),
     () => shadow('conversation.input.dock', { id: 'bot-members', order: -120, inject: face }, MemberDock),
     () => shadow('conversation.input.dock', { id: 'bot-model', order: -110, inject: face }, ModelChoiceDock),
     () => shadow('conversation.input.dock', { id: 'bot-question', order: -100, inject: face }, QuestionDock),

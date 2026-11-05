@@ -394,7 +394,7 @@ function guardPermissions() {
 // Where the server's window goes. Its own pages and its sign-in stay; Google, Microsoft and every
 // other site open in the system browser, except that a sign-in in the window never goes on to
 // Google or Microsoft: it would end in the system browser, whose cookie the window never gets.
-function watchServer(contents) {
+function watchServer(contents, win) {
   contents.on('will-navigate', (event, url) => {
     const to = event.url ?? url
     const where = navigationOf(to, origin)
@@ -415,6 +415,8 @@ function watchServer(contents) {
   contents.on('did-navigate', (_event, url, status) => {
     pageStatus = status
     const where = navigationOf(url, origin)
+    // The window's color is the team view's; another page that sets none gets a browser's white.
+    win.setBackgroundColor(where === 'inside' && status < 400 ? teamBackground() : '#ffffff')
     if (where === 'signin') { signIn(url); return }
     if (where !== 'inside') return
     if (status === 401) { needLink(); return }
@@ -1139,7 +1141,7 @@ function createWindow() {
     // src/client/frame-layout.js is the avatar rail plus the smallest chat column.
     ...startWindow.mainBounds(), minWidth: 508, minHeight: 480,
     title: PRODUCT_NAME, show: false, icon: iconFile,
-    backgroundColor: mica ? '#00000000' : dark ? '#1b1b1c' : '#ffffff',
+    backgroundColor: teamBackground(),
     // Frameless as in DSH Desktop: the caption buttons overlay the page's band. They keep the
     // sidebar's colors until the page sends the colors of the surface under them.
     ...(win32 ? {
@@ -1212,7 +1214,7 @@ function createWindow() {
     child.webContents.on('will-redirect', away)
   })
   if (serverMode()) {
-    watchServer(contents)
+    watchServer(contents, win)
   } else {
     contents.on('will-navigate', (event, url) => {
       if (url.startsWith(`${origin}/`)) return
@@ -1230,6 +1232,11 @@ function createWindow() {
   win.on('show', () => { void flushDeferredUpdate().catch((error) => { console.error(error) }) })
   win.on('restore', () => { void flushDeferredUpdate().catch((error) => { console.error(error) }) })
   return win
+}
+
+function teamBackground() {
+  if (mica) return '#00000000'
+  return nativeTheme.shouldUseDarkColors ? '#1b1b1c' : '#ffffff'
 }
 
 // The window is gone for good: a new one takes its place and talks to the Host that runs.

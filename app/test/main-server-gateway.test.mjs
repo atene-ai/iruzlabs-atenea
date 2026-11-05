@@ -58,6 +58,7 @@ test('a window without the gateway\'s session is sent to the sign-in, which show
   await waitFor(() => window()?.visible === true, 'show the sign-in')
   const win = window()
   assert.match(win.url, /^https:\/\/iruz-atenea\.auth\.mx-central-1\.amazoncognito\.com\/login\?/u)
+  assert.equal(win.background, '#ffffff', 'a sign-in page gets a browser\'s white')
   assert.equal(hostState.starts, 0)
   assert.deepEqual(opened(), [], 'nothing went to the system browser')
   assert.deepEqual(cards, [], 'no VPN card and no access link card')
@@ -69,6 +70,7 @@ test('signing in comes back through /auth/callback to the team view in the same 
   const win = window()
   assert.equal(await win.navigate(`${COGNITO}/login?client_id=c&state=s1&sent=1`), true)
   assert.equal(win.url, `${SERVER}/`)
+  assert.equal(win.background, win.options.backgroundColor, 'the team view gets the window\'s own color back')
   assert.equal(session, true, 'the session cookie belongs to the window')
   win.webContents.mainFrame.url = win.url
   state.ipc.get('ds-bot:ready')({ sender: win.webContents, senderFrame: win.webContents.mainFrame })

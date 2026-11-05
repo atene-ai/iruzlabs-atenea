@@ -88,7 +88,7 @@ export class FakeWindow extends EventEmitter {
   getNormalBounds() { return this.getBounds() }
   setBounds() {}
   setContentBounds() {}
-  setBackgroundColor() {}
+  setBackgroundColor(color) { this.background = color }
   setSkipTaskbar() {}
   isFocused() { return false }
   showInactive() { this.visible = true; this.shown += 1; this.emit('show') }

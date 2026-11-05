@@ -51,12 +51,23 @@ function start({ pages = {}, services = {} } = {}) {
   return { ctx, call, stop, routes }
 }
 
+// A missing event used to hang a test until the 60 s test timeout, with no word
+// of which one it was (IRU-920); `next(waiting)` names it instead.
+const EVENT_WAIT_MS = 10_000
+
 // Reads Server-Sent Events off a response, one `{ event, data }` per call.
 function reader(response) {
   const source = response.body.getReader()
   const decoder = new TextDecoder()
   let buffer = ''
-  return async function next() {
+  return function next(waiting = 'the next event') {
+    let timer
+    const late = new Promise((_, reject) => {
+      timer = setTimeout(() => reject(new Error(`the feed sent nothing in ${EVENT_WAIT_MS} ms while the test waited for ${waiting}`)), EVENT_WAIT_MS)
+    })
+    return Promise.race([read(), late]).finally(() => clearTimeout(timer))
+  }
+  async function read() {
     for (;;) {
       const end = buffer.indexOf('\n\n')
       if (end >= 0) {
@@ -81,17 +92,17 @@ test('the live feed tells a window about saves, new chat entries and the reply b
   const response = await routes['/api/bot/feed'].fetch(new Request('http://localhost/api/bot/feed', { signal: abort.signal }))
   assert.equal(response.headers.get('content-type'), 'text/event-stream; charset=utf-8')
   const next = reader(response)
-  assert.equal((await next()).event, 'hello')
+  assert.equal((await next('hello')).event, 'hello')
 
   await call('set-prefs', { motion: 'lively' })
-  const saved = await next()
+  const saved = await next('revision after set-prefs')
   assert.equal(saved.event, 'revision')
   assert.equal(saved.data.revision > TEAM.revision, true)
 
   // The feed's own listener is the last on session/event; the others need a live dsh.
   const onEvent = ctx.listeners.get('session/event').at(-1)
   onEvent({ id: 'm1c' }, userMessage('hello', 60))
-  assert.deepEqual(await next(), { event: 'message', data: { botId: 'm1', sessionId: 'm1c', item: { kind: 'user', text: 'hello', time: 60 } } })
+  assert.deepEqual(await next('the user message'), { event: 'message', data: { botId: 'm1', sessionId: 'm1c', item: { kind: 'user', text: 'hello', time: 60 } } })
   // A group Session or an earlier part is not a Bot's own chat now.
   onEvent({ id: 'm1' }, userMessage('old', 1))
   onEvent({ id: 'm1c' }, botMessage('hidden', 61, 7))
@@ -107,19 +118,19 @@ test('the live feed tells a window about saves, new chat entries and the reply b
   onStream({ agent, frame: { type: 'end', attemptId: 'a1' } })
   onStream({ agent, frame: { type: 'end', attemptId: 'a7' } })
   const target = { botId: 'm1', sessionId: 'm1c', attemptId: 'a1' }
-  assert.deepEqual(await next(), { event: 'stream', data: { ...target, phase: 'start' } })
-  assert.deepEqual(await next(), { event: 'stream', data: { ...target, text: 'Hi ' } })
-  assert.deepEqual(await next(), { event: 'stream', data: { ...target, text: 'there' } })
-  assert.deepEqual(await next(), { event: 'stream', data: { ...target, phase: 'end' } })
+  assert.deepEqual(await next('stream start'), { event: 'stream', data: { ...target, phase: 'start' } })
+  assert.deepEqual(await next('stream text "Hi "'), { event: 'stream', data: { ...target, text: 'Hi ' } })
+  assert.deepEqual(await next('stream text "there"'), { event: 'stream', data: { ...target, text: 'there' } })
+  assert.deepEqual(await next('stream end'), { event: 'stream', data: { ...target, phase: 'end' } })
 
   // Status changes in a burst come as one notice.
   const onStatus = ctx.listeners.get('agent/status').at(-1)
   for (const id of ['b2', 'm1c', 'b2']) onStatus({ agent: { id }, status: 'running' })
   onStatus({ agent: { id: 'not-a-bot' }, status: 'running' })
-  assert.deepEqual(await next(), { event: 'live', data: {} })
+  assert.deepEqual(await next('live after the status burst'), { event: 'live', data: {} })
 
   abort.abort()
-  assert.equal(await next(), undefined)
+  assert.equal(await next('the end of the stream'), undefined)
 })
 
 test('a window that stops reading the feed is dropped', { timeout: 10_000 }, async (t) => {
@@ -217,7 +228,7 @@ test('view replay omits hidden, refused and interactive calls in pages and the l
   t.after(() => abort.abort())
   const response = await routes['/api/bot/feed'].fetch(new Request('http://localhost/api/bot/feed', { signal: abort.signal }))
   const next = reader(response)
-  assert.equal((await next()).event, 'hello')
+  assert.equal((await next('hello')).event, 'hello')
   const onEvent = ctx.listeners.get('session/event').at(-1)
   for (const event of events) onEvent({ id: 'm1c' }, event)
   assert.deepEqual(await next(), { event: 'message', data: { botId: 'm1', sessionId: 'm1c', item: expected } })

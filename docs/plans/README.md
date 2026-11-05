@@ -58,4 +58,4 @@
 | [启动页文案](2026-10-29-start-copy.md) | 启动页和壳里系统对话框的字：按页面位置分层，每层一条写法规则；`text.mjs` 一张表、旧键到新键的对照、扫全表的测试 |
 | [手机 App](2026-10-24-mobile-app.md) | iOS 和 Android 远程操控电脑上的 Bot 团队：手机不跑 Agent；扫码配对、端到端加密、电脑只往外连；完整功能，高权限操作要解锁手机 |
 | [Office 文档](2026-10-27-office-documents.md) | Bot 离线处理 .docx/.pptx/.xlsx：应用带的 payload、`office.js` 命令行、office 路由换成带 `office-tools` 的版本 |
-| [Atenea 服务器网关](2026-11-04-atenea-gateway.md) | 员工经 Cognito 登录、SLA 判断能否进入；网关独占 DSH 所有者 cookie、按路径过滤、把签名身份交给 ds-bot；服务器模式关掉终端、插件管理等所有者功能；已知的隔离限制 |
+| [Atenea 服务器网关](2026-11-04-atenea-gateway.md) | 员工经 Cognito 登录、SLA 判断能否进入；网关独占 DSH 所有者 cookie、按路径过滤、把签名身份交给 ds-bot、按会话检查 DSH 自己的调用和流；服务器模式关掉终端、插件管理等所有者功能；已知的隔离限制 |

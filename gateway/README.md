@@ -84,16 +84,18 @@ answers, 503 otherwise.
 
 dsh's unary Remote calls are `POST /api/<namespace>/<method>`, and dsh refuses a body whose
 `method` differs from the path, so the gateway filters them by path. Remote streams (Session
-follow, job output, the terminal…) all share the WebSocket `/api/remote.mux`, which the
-gateway forwards without reading it; the owner-only features that use it are switched off
-inside dsh instead ([below](#dsh-features-switched-off)). Lists follow dsh 0.2.0-rc.2 and
-live in [`src/policy.js`](src/policy.js); an unknown namespace is refused.
+follow, job output, the terminal…) all share the WebSocket `/api/remote.mux`; the gateway
+reads what the browser sends on it ([Session checks](#session-checks)), and the owner-only
+features that use it are also switched off inside dsh ([below](#dsh-features-switched-off)).
+Lists follow dsh 0.2.0-rc.2 and live in [`src/policy.js`](src/policy.js); an unknown
+namespace is refused. The path policy applies to everyone, superadmins too, before the
+Session checks.
 
 | Reaches dsh | |
 |---|---|
 | `GET`/`HEAD` of pages, assets and `/plugins/…` (client bundles, plugin reload events) | |
 | `POST /api/bot`, `GET /api/bot/feed` | the ds-bot channel and its live feed |
-| WebSocket `GET /api/remote.mux` | Remote streams |
+| WebSocket `GET /api/remote.mux` | Remote streams; each `open` is checked ([Session checks](#session-checks)) |
 | `POST /api/<ns>/<method>` for `session`, `workspace`, `job`, `goals`, `subagents`, `userQuestions`, `messageFeedback`, `sessionFeedback`, `commands`, `fileReferences`, `fileUploads`, `skills`, `sessionReferenceResolver`, `permissionPresets`, `agentPresets`, `llm`, `pluginInventory`, `settings`, `credentials` | chat and navigation; `settings` and `credentials` only `describe` |
 | `GET /api/file?path=` | only below `GATEWAY_FILE_ROOTS` (default `/workspace`) |
 | `GET /api/session.export` | a Session's log as a ZIP (the same data the chat view reads) |
@@ -106,6 +108,70 @@ live in [`src/policy.js`](src/policy.js); an unknown namespace is refused.
 | `/api/file` outside the work folders | it serves any absolute path dsh can read |
 | `/connect`, `/oauth/callback`, `/open-in-app/*`, other `/api/…` routes | API cookie exchange, dsh account sign-in, host program launcher |
 | WebSocket to any other path; non-GET methods outside `/api` | |
+
+## Session checks
+
+The path policy decides which kinds of call reach dsh; the Session checks decide, per staff
+member, which Sessions they reach. dsh admits every browser as its one owner, so without them
+anyone signed in could read or drive any Bot's Session through dsh's own API, or write where
+they only read. Superadmins are not checked. Everyone else is held to what ds-bot answers:
+
+- **Asking ds-bot.** `POST /api/bot` `{ endpoint: 'session-access', payload: { sessionIds } }`,
+  sent through the gateway's own dsh session with the person's `x-atenea-identity`. ds-bot
+  maps each Session to its Bot (own chat, group Sessions, earlier parts, subagents through
+  their parent) and answers `{ sessions: { <id>: { allowed: 'write' | 'read' | 'none',
+  botId?, roomId? } } }` about the caller only; a Session no Bot owns is `none` for everyone
+  but superadmins. Answers are kept 30 s per person and Session. A person whose role or
+  `agents` change gets a fresh cache; a 401 or 403 from ds-bot or from dsh for one of their
+  checked calls empties theirs. When ds-bot cannot answer, a call gets 503 and a stream is
+  refused.
+- **Unary calls.** For every `POST /api/<ns>/<method>` in an allowed namespace the gateway
+  reads the JSON body (up to 16 MiB; more gets 413), checks it is a dsh call for that path
+  (`type: 'client-request'`, the same `method`, `payload.args` an object; otherwise 400), and
+  applies the method's rule in [`src/session-rules.js`](src/session-rules.js). A refused call
+  gets dsh's own answer shape, HTTP 200 with `result: { ok: false, error: { code:
+  'atenea/forbidden', message } }` ("Readers can only view this conversation", "Unknown
+  conversation", "Only a superadmin can do this", "This action is not available on a shared
+  Atenea server"), and never reaches dsh. A method without a rule is refused (fail closed); a
+  test compares the rules with every dsh method ([`test/fixtures/dsh-remotes.json`](test/fixtures/dsh-remotes.json),
+  made by [`scripts/dsh-remotes.mjs`](scripts/dsh-remotes.mjs) from dsh 0.2.0-rc.2 and
+  0.2.1-rc.5) and fails when an allowed namespace has a method without one.
+- **Mentions.** dsh turns `dsh-session:<id>` in a person's message into a snapshot of that
+  other Session for the model, so every string of a checked body, and of every `/api/bot`
+  body, is searched for one: each mentioned Session needs `read`, and a mention that does not
+  decode refuses the call.
+- **Lists.** `session/list`, `session/search` and `sessionReferenceResolver/candidates` are
+  forwarded and their answer is cut down to the Sessions the caller reads.
+- **Routes.** `GET /api/session.export?sessionId=` needs `read` and `POST
+  /api/session/uploadFileBinary?sessionId=` needs `write`; exactly one `sessionId` (404 for a
+  Session the caller does not see, 403 for one they only read).
+- **Remote streams.** A stream is opened by the browser's first message on the mux, `{ type:
+  'open', streamId, endpoint, payload: { args } }`; no HTTP call the gateway sees precedes it.
+  These are JSON text messages in ordinary WebSocket frames, and dsh's mux negotiates no
+  compression (the gateway also removes the browser's `Sec-WebSocket-Extensions` offer and
+  refuses a handshake answer that carries one), so the gateway reads the browser-to-dsh frames
+  ([`src/websocket.js`](src/websocket.js)) and checks every `open` against the same rules. A
+  refused stream is sent on as an `open` of the endpoint `atenea/forbidden`, which dsh does not
+  know: dsh fails that one stream and the socket stays up. Streams outside the allowed
+  namespaces are refused to everyone. A binary or unreadable message, an unmasked frame or a
+  frame with a reserved bit closes the socket, as dsh would. dsh's frames to the browser are
+  not read.
+
+Per method, for dsh 0.2.0-rc.2 and 0.2.1-rc.5 (*s* marks a stream; `request.x` is the field
+`x` of the argument `request`):
+
+| Rule | Methods |
+|---|---|
+| **write** on the named Session | `session/prompt`, `session/cancel`, `session/rename`, `session/selectModel`, `session/updateQueue`, `job/kill`, `messageFeedback/put`, `messageFeedback/delete`, `sessionFeedback/record`, and `pinSession`, `unpinSession` of the `workspace` namespace (`request.sessionId`); `commands/execute`, `fileUploads/upload`, `goals/create`, `goals/edit`, `goals/pause`, `goals/resume`, `goals/complete`, `goals/clear`, `userQuestions/answer`, `agentPresets/select`¹ (`agentId`); `subagents/prompt` (`request.parentSessionId`, `request.childSessionId`); `subagents/interruptByParent` (`childSessionId`, `parentSessionId`); route `session/uploadFileBinary` (`?sessionId`) |
+| **read** on the named Session | `session/projections`, `session/attachment`, `skills/list`, `messageFeedback/list` (`request.sessionId`); `session/page`, *s* `session/follow` (`request.address`: the Session, or a subagent and its parent); `commands/list`, `fileReferences/list`, `goals/get` (`agentId`); *s* `job/list`, *s* `job/follow` (`request.sessionId`); *s* `userQuestions/attachWait` (`agentId`); route `session.export` (`?sessionId`) |
+| **read**, answer cut down | `sessionReferenceResolver/candidates` (`agentId`, then the candidates) |
+| answer cut down | `session/list`, `session/search` |
+| **superadmin** | `session/create`, `session/fork` (a new Session of dsh's own); `create`, `delete`, `rename`, `insertBefore`, `insertSessionBefore`, `archiveSession`, `unarchiveSession` of the `workspace` namespace (ds-bot owns where Bot Sessions live); `llm/discoverModels` (fetches any URL with any key), `session/workspacePathApplications`; and, also refused by the path policy, `settings/mutate`, `settings/replace`, `settings/update`, `settings/openSettingsDocument`, `credentials/set`, `credentials/unset`, `session/openWorkspacePath` |
+| open: names no Session | `agentPresets/list`, `agentPresets/read`, `credentials/describe`, `settings/describe`, `llm/listProviders`, `llm/listConfigurableProviders`, `permissionPresets/catalog`, `pluginInventory/list`, `session/modelCatalog`, `session/canOpenWorkspacePath`, `session/initializeDefaultModel`, `initializeDefault` of the `workspace` namespace; *s* `$events`, *s* `session/control`, *s* `follow` of the `workspace` namespace, *s* `remoteAccess/follow` (0.2.1) |
+| refused to everyone but superadmins | any other method or stream of an allowed namespace |
+| refused to everyone (path policy) | any other namespace, unary or stream; `$events/result` (answers to dsh's approval and question waterfalls) |
+
+¹ Also refused by the path policy.
 
 ## dsh features switched off
 
@@ -140,15 +206,35 @@ Read this before treating the gateway as a per-person boundary.
   send them past the gateway), dsh's cookie key in `/data/.credentials.yaml`, and every
   Bot's chats and memory in `/data`. Keep only Atenea's own key in that environment, give it
   a spending limit, and rotate it if a Bot's output ever shows it.
-- **dsh's Session calls are not per Bot.** Every admitted person acts as dsh's owner on the
-  allowed namespaces: the `session`, `job` and `workspace` calls and the Session streams can
-  read and drive any Bot's Sessions, not only the Bots their `agents` roles name. The roles are
-  enforced only where ds-bot checks `x-atenea-identity` (its `/api/bot` channel). dsh
-  0.2.0-rc.2 offers no way to admit a browser as anything but the owner, so per-Bot
-  isolation of dsh's own Remote surface needs dsh itself to change.
+- **Three host-wide streams are not cut down.** dsh sends every browser, as its owner, the
+  `$events` stream (host events: `api-session/added`, `status`, `activity` and `error` for
+  every Session, with its working folder and parent; the approval and question waterfalls of
+  every Session, with the tool call or the questions in them; goal, command and preset
+  changes), the `session/control` stream (the projections of every live Session: title,
+  todos, goal, open questions, token use, subagent labels) and the Workspace stream (`follow` of the
+  `workspace` namespace: every Workspace and its Session order). The UI needs all three, and the gateway does not read
+  dsh's frames to the browser, so any admitted person can read that metadata of every Bot's
+  Sessions. The full history (`session/page`, `session/follow`, `session.export`), writing,
+  and the other Session streams are checked. Answering a waterfall (`$events/result`) is
+  refused by the path policy. Closing this needs dsh to admit a browser as a principal other
+  than its owner: dsh 0.2.1's `remoteAccess` service already filters `$events` frames,
+  `session/control` items and lists for non-owner principals, but dsh admits a browser only
+  with its owner cookie, and no documented hook lets a plugin or the gateway admit one per
+  person (`connection/request` runs before the body and not for mux frames). That is a dsh
+  change, not something to patch.
+- **Files by path.** `/api/file?path=` serves anything below `GATEWAY_FILE_ROOTS`, and Bots'
+  work folders live there; a path names no Session, so it is not checked per Bot.
+- **The check is as fresh as ds-bot's answer.** A share removed in SLA still counts for up to
+  30 s of cache (plus the time until the gateway's next SLA check, at most 60 s); a stream
+  already open stays open.
+- **Rules follow dsh 0.2.0-rc.2 and 0.2.1-rc.5.** A new dsh method in an allowed namespace is
+  refused until it has a rule; a changed argument field name makes the method's calls fail
+  with 400 until its rule is updated. Regenerate `test/fixtures/dsh-remotes.json` when
+  `DSH_VERSION` changes.
 - **ds-bot's channel is passed whole.** `/api/bot` carries owner-level ds-bot actions too
-  (provider keys, connectors, secrets, plugin and dsh updates, folder listing). Until ds-bot
-  authorizes them from `x-atenea-identity`, every admitted person can use them.
+  (provider keys, connectors, secrets, plugin and dsh updates, folder listing); with
+  `ATENEA_MULTIUSER=1` ds-bot authorizes each of them from `x-atenea-identity`. The gateway
+  only searches its bodies for Session mentions.
 
 ## Configuration
 
@@ -203,5 +289,13 @@ tokens. It prints the `COGNITO_*` values.
 npm test        # node --test test/*.test.js
 ```
 
-Fakes for Cognito, SLA and dsh web run in process or on loopback; nothing needs keys or a
-network. The server-mode image test is [`docker/test-server.mjs`](../docker/test-server.mjs).
+Fakes for Cognito, SLA and dsh web (with ds-bot's `session-access` answer) run in process or
+on loopback; nothing needs keys or a network. The session rules are also checked against the
+dsh packages ds-bot's tests install (`../ds-bot/dev/harness`, or `DSH_HARNESS`) when they are
+there. The server-mode image test is [`docker/test-server.mjs`](../docker/test-server.mjs).
+
+After a dsh upgrade, list its Remote methods again:
+
+```sh
+node scripts/dsh-remotes.mjs <dsh 0.2.0-rc.2>/node_modules/@deepseek-ai ../ds-bot/dev/harness/node_modules/@deepseek-ai > test/fixtures/dsh-remotes.json
+```

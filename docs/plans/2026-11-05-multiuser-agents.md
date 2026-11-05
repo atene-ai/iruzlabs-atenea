@@ -62,6 +62,12 @@ Atenea 作为公司内部的服务器运行（Docker 里的 DSH Web 加 `ds-bot`
 - 团队记忆只有超级管理员能改：`memory-forget` 的团队范围走管理员规则，记忆面板的提问和恢复里涉及团队记忆的修改在 `memory.js` 里拒绝。Bot 自己的记忆工具不受影响。
 - 规则表是 `src/host/access.js` 的 `ENDPOINT_RULES`，每个端点一条：`any`、`read`、`write`、`manage`、`create`、`admin`、`off`，以及它作用在哪个 Bot、群或会话上。没有规则的端点在多人模式下一律拒绝；单元测试扫描 `channel.js` 的 switch，新端点缺规则测试就失败。
 
+### 给网关的会话权限
+
+- `session-access` 端点（规则 `any`）：`{ sessionIds: [...] }`，一次最多 500 个，只回答调用者自己的权限：`{ sessions: { [id]: { allowed: 'write' | 'read' | 'none', botId?, roomId? } } }`。网关在转发 DSH 自己的会话调用和流之前问它（见 [网关](2026-11-04-atenea-gateway.md)「会话检查」）。只在多人模式下回答，否则 `bot/unavailable`。
+- 会话对到 Bot 的方式和 `access.js` 的 `sessionTarget` 一样：Bot 自己的聊天和更早的分段、群自己的会话和分段、成员在群里的隐藏会话（按群的规则）。子 agent 会话顺着父会话往上找到属于 Bot 的那个：在线的看 Agent 的 `header.parentSession`，冷的看 DSH 的会话列表（`sessionController.list`，没找到时最多每 5 秒重新列一次）。
+- 权限和 `/api/bot` 一样：看得到就是 `read`，能写（owner、editor；Main Bot 只有超级管理员）就是 `write`。不属于任何 Bot 的会话（DSH 自己的会话、DSH Agent 的会话）对非超级管理员是 `none`。`none` 不带 `botId`，不透露会话属于谁。
+
 ### SLA
 
 - 地址是 `SLA_URL`，请求带 `Authorization: Bearer <x-atenea-sla-token>`，10 秒超时（`src/host/sla.js`）。
@@ -98,8 +104,8 @@ Atenea 作为公司内部的服务器运行（Docker 里的 DSH Web 加 `ds-bot`
 
 - Bot 在容器里有完整权限：能和一个 Bot 聊天的人，就能让它读写容器里的文件、执行命令、访问网络。目录限制只是 `ds-bot` 工具钩子里的检查（见[隐私 Bot](2026-10-27-private-bots.md)），所以工作文件夹和沙盒权限只给超级管理员。
 - Bot 之间照常协作：editor 可以让自己的 Bot 给别的 Bot 发消息、读公开 Bot 的记忆和团队记忆、读它所在群的内容。可见性边界管的是人在界面和接口上能看到什么，不管 Bot 之间的数据流动；需要隔离的 Bot 用隐私 Bot。
-- DSH 自己的接口不认识这些身份。会话列表、会话事件流和输入框的 prompt 走 DSH 的 mux WebSocket，由 DSH 直接处理。`ds-bot` 只能过滤它自己暴露的东西（`/api/bot`、feed、团队视图），过滤不了 DSH 的会话流：知道会话 id 的人可以用 DSH 自己的界面或接口读写任何会话，reader 的只读输入框也只是界面上的限制。真正的隔离需要 DSH 提供按请求鉴权的钩子（可记入 [DSH 让步总账](2026-10-13-dsh-concessions.md)），或者在网关上限制 DSH 的会话接口。
-- Bot 自己聊天里的审批卡是 DSH 的，不经过 `ds-bot` 的角色检查。
+- DSH 自己的接口不认识这些身份，由网关按 `session-access` 的回答检查：单次调用（`POST /api/<命名空间>/<方法>`，包括 prompt）、会话列表和搜索、日志下载和上传、mux 上每个流的打开请求，以及消息里对别的会话的 `dsh-session:` 提及。reader 的只读输入框因此不只是界面限制。还剩三个全局流没有按会话过滤：`$events`、`session/control` 和工作区的 `follow` 流把所有会话的元数据（标题、状态、待办、Goal、未答的提问、审批里的工具调用）发给每个浏览器；完整历史和写操作都检查了。关上这一块需要 DSH 能按人接入浏览器（非所有者身份），这是 DSH 的改动（可记入 [DSH 让步总账](2026-10-13-dsh-concessions.md)），细节见网关文档「已知限制」。
+- Bot 自己聊天里的审批卡是 DSH 的，不经过 `ds-bot` 的角色检查；在共用服务器上，回答它的 `$events/result` 被网关的路径策略拒绝，审批走 `ds-bot` 的 `approval-answer`。
 - 署名靠窗口认领。认领晚于 Bot 读到消息时，那条消息对模型没有名字；DSH 原生界面、手机 App 或其他客户端发的消息没有署名。
 - feed 在连接时校验一次身份，到身份过期时断开，窗口用新身份重连。
 - 本机的 5 分钟覆盖只在内存里，重启后以网关的 claim 为准。按 email（而不是员工 id）共享时没有本机覆盖，要等网关的 claim 更新。
@@ -108,3 +114,4 @@ Atenea 作为公司内部的服务器运行（Docker 里的 DSH Web 加 `ds-bot`
 ## 变更
 
 - 2026-11-05：初版。
+- 2026-11-05：加 `session-access` 端点，供网关检查 DSH 自己的会话调用；改写「已知限制」里 DSH 接口那一条（PR feat/gateway-session-guard）。

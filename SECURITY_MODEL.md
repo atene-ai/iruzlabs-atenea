@@ -57,12 +57,12 @@ Trust boundaries:
 - HTML widgets in `sandbox="allow-scripts"` iframes; Electron webviews sandboxed with contextIsolation and own partitions; IPC handlers call `assertWindow(event)`.
 - Cookie values stay in the Electron main process (`cookie-import.mjs`).
 - Launch token redacted from host logs (`host-process.mjs`).
-- Atenea server: the gateway verifies Cognito ID tokens, re-checks SLA at most every 60 s, strips client cookies and `x-atenea-*` headers, requires its own Origin for state changes and WebSockets, and refuses owner-only routes; `server.patch.yml` switches off the dsh features whose streams share the unfiltered `/api/remote.mux` socket; the launch token stays out of the log.
+- Atenea server: the gateway verifies Cognito ID tokens, re-checks SLA at most every 60 s, strips client cookies and `x-atenea-*` headers, requires its own Origin for state changes and WebSockets, and refuses owner-only routes; for staff who are not superadmins it holds every dsh Session call, Session list, log download, upload, `dsh-session:` mention and Remote stream `open` on `/api/remote.mux` to the read/write access ds-bot's `session-access` answers (gateway/README.md, "Session checks"); `server.patch.yml` switches off the owner-only dsh features; the launch token stays out of the log.
 
 ## Out of scope / accepted risk (maintainer)
 
 - **Docker edition: Bots have full access inside the container by design** (`danger-full-access`, approval `never`). A Bot changing or reading files inside the container is not a finding; escaping the container or leaking keys/secrets still is.
-- **Atenea server: admitted staff are not isolated from each other inside dsh.** dsh 0.2.0-rc.2 admits browsers only as its owner, so the Session, job and Workspace calls the UI needs reach every Bot; per-Bot roles hold only where ds-bot checks `x-atenea-identity`. A staff member who can talk to a Bot can also have it read the container's environment (model key, `ATENEA_IDENTITY_SECRET`) and `/data` (gateway/README.md, "What stays possible").
+- **Atenea server: admitted staff still share dsh's host-wide streams.** dsh admits browsers only as its owner. The gateway checks Session calls and stream opens per person, but the `$events`, `session/control` and Workspace `follow` streams the UI needs carry metadata of every Session (titles, status, todos, goals, open questions, approval tool calls) to everyone admitted; closing that needs dsh to admit non-owner browser principals. A staff member who can talk to a Bot can also have it read the container's environment (model key, `ATENEA_IDENTITY_SECRET`) and `/data` (gateway/README.md, "What stays possible").
 - DSH itself is upstream; not explicitly ruled out, but fixes belong upstream (hard rule: never patch DSH).
 
 ## Open questions

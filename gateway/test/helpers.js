@@ -1,7 +1,7 @@
 // Fakes for the gateway's tests: Cognito (JWKS, token and revoke endpoints) and SLA behind an
 // injected fetch, and a dsh web stand-in on a real port with the launch-token exchange, the
 // owner cookie and a WebSocket echo. Nothing here talks to the network beyond loopback.
-import { createHash, generateKeyPairSync, randomBytes, sign } from 'node:crypto'
+import { createHash, createHmac, generateKeyPairSync, randomBytes, sign } from 'node:crypto'
 import { mkdtempSync, writeFileSync, rmSync } from 'node:fs'
 import http from 'node:http'
 import net from 'node:net'
@@ -139,6 +139,82 @@ export function fakeFetch(...handlers) {
 
 export const WS_GUID = '258EAFA5-E914-47DA-95CA-C5AB0DC85B11'
 
+// A browser's WebSocket frame: masked, text unless told otherwise.
+export function clientFrame(payload, { opcode = 1, fin = true, masked = true } = {}) {
+  const data = Buffer.from(payload)
+  const length = data.length
+  const size = length < 126 ? 2 : length < 65536 ? 4 : 10
+  const head = Buffer.alloc(size + (masked ? 4 : 0))
+  head[0] = (fin ? 0x80 : 0) | opcode
+  const mask = masked ? 0x80 : 0
+  if (size === 2) head[1] = mask | length
+  else if (size === 4) {
+    head[1] = mask | 126
+    head.writeUInt16BE(length, 2)
+  } else {
+    head[1] = mask | 127
+    head.writeBigUInt64BE(BigInt(length), 2)
+  }
+  if (!masked) return Buffer.concat([head, data])
+  const key = randomBytes(4)
+  key.copy(head, size)
+  return Buffer.concat([head, Buffer.from(data.map((byte, index) => byte ^ key[index & 3]))])
+}
+
+// Every whole frame in `buffer`, unmasked: [{ fin, opcode, masked, text }].
+export function readFrames(buffer) {
+  const frames = []
+  let at = 0
+  while (buffer.length - at >= 2) {
+    const masked = (buffer[at + 1] & 0x80) !== 0
+    let length = buffer[at + 1] & 0x7f
+    let offset = at + 2
+    if (length === 126) {
+      length = buffer.readUInt16BE(offset)
+      offset += 2
+    } else if (length === 127) {
+      length = Number(buffer.readBigUInt64BE(offset))
+      offset += 8
+    }
+    const key = masked ? buffer.subarray(offset, offset + 4) : null
+    if (masked) offset += 4
+    if (buffer.length < offset + length) break
+    const data = Buffer.from(buffer.subarray(offset, offset + length))
+    if (key) for (let index = 0; index < data.length; index += 1) data[index] ^= key[index & 3]
+    frames.push({ fin: (buffer[at] & 0x80) !== 0, opcode: buffer[at] & 0x0f, masked, text: data.toString('utf8') })
+    at = offset + length
+  }
+  return frames
+}
+
+// The DSH Sessions of the fake team, and whose they are: Ana owns bot-a and reads bot-b.
+export const SESSION_OWNERS = { 'sess-a': 'bot-a', 'sub-a': 'bot-a', 'sess-b': 'bot-b', 'sess-c': 'bot-c' }
+
+// ds-bot's session-access answer, as the identity in the headers would get it.
+function sessionAccessAnswer(state, headers, ids) {
+  const token = String(headers['x-atenea-identity'] ?? '')
+  const [head, payload, signature] = token.split('.')
+  const expected = head && payload ? createHmac('sha256', IDENTITY_SECRET).update(`${head}.${payload}`).digest('base64url') : ''
+  if (!signature || signature !== expected) return { status: 401, body: { ok: false, error: { code: 'bot/auth-required', message: 'Sign in to Atenea first', details: {} } } }
+  const claims = JSON.parse(Buffer.from(payload, 'base64url').toString())
+  state.accessCalls.push({ sub: claims.sub, ids })
+  if (state.accessAnswer) return state.accessAnswer(claims, ids)
+  const sessions = {}
+  for (const id of ids) {
+    const botId = state.owners[id]
+    const role = claims.role === 'superadmin' ? 'owner' : claims.agents?.[botId]
+    const allowed = role === 'owner' || role === 'editor' ? 'write' : role === 'reader' ? 'read' : 'none'
+    sessions[id] = allowed === 'none' ? { allowed } : { allowed, ...(botId ? { botId } : {}) }
+  }
+  return { status: 200, body: { ok: true, value: { sessions } } }
+}
+
+const LISTS = {
+  '/api/session/list': rows => ({ items: rows }),
+  '/api/session/search': rows => ({ items: rows.map(row => ({ sessionId: row.sessionId, snippet: 'found' })), hasMore: false }),
+  '/api/sessionReferenceResolver/candidates': rows => rows.map(row => ({ sessionId: row.sessionId, label: row.sessionId, sameWorkspace: true, createdAt: 1, mention: `@[${row.sessionId}](x)` })),
+}
+
 // The dsh web stand-in. It checks what dsh checks: the owner cookie on every request and
 // the launch token on GET /. It records every request it sees.
 export async function startDsh() {
@@ -149,6 +225,17 @@ export async function startDsh() {
     requests: [],
     upgrades: [],
     sockets: new Set(),
+    // What the WebSocket received from the gateway, frame by frame.
+    frames: [],
+    owners: { ...SESSION_OWNERS },
+    accessCalls: [],
+    accessAnswer: undefined,
+    // The Sessions dsh's list, search and reference answers name.
+    rows: Object.keys(SESSION_OWNERS).concat('dsh-own').map(sessionId => ({ sessionId, updatedAt: 1, running: false, blank: false, agentAvailable: false })),
+    // A status to answer for a path instead of the usual one.
+    statusFor: new Map(),
+    // An extension the WebSocket handshake answers with, as a dsh with compression would.
+    wsExtension: undefined,
   }
   const owner = headers => String(headers.cookie ?? '').split(';').some(part => part.trim() === `dsh-auth-test=${state.cookie}`)
   const server = http.createServer((req, res) => {
@@ -175,6 +262,24 @@ export async function startDsh() {
         res.write('event: hello\ndata: {}\n\n')
         return
       }
+      const body = state.requests[state.requests.length - 1].body
+      let parsed
+      try {
+        parsed = JSON.parse(body)
+      } catch {}
+      if (url.pathname === '/api/bot' && parsed?.endpoint === 'session-access') {
+        const answer = sessionAccessAnswer(state, req.headers, parsed.payload?.sessionIds ?? [])
+        res.writeHead(answer.status, { 'content-type': 'application/json' })
+        return res.end(JSON.stringify(answer.body))
+      }
+      if (state.statusFor.has(url.pathname)) {
+        res.writeHead(state.statusFor.get(url.pathname))
+        return res.end()
+      }
+      if (Object.hasOwn(LISTS, url.pathname)) {
+        res.writeHead(200, { 'content-type': 'application/json' })
+        return res.end(JSON.stringify({ type: 'server-response', rpcId: parsed?.rpcId ?? 'none', result: { ok: true, value: LISTS[url.pathname](state.rows) } }))
+      }
       res.writeHead(200, { 'content-type': 'application/json', 'set-cookie': 'dsh-auth-test=leak; Path=/' })
       res.end(JSON.stringify({ path: url.pathname, method: req.method }))
     })
@@ -186,11 +291,20 @@ export async function startDsh() {
       return
     }
     const accept = createHash('sha1').update(`${req.headers['sec-websocket-key']}${WS_GUID}`).digest('base64')
-    socket.write(`HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: ${accept}\r\nSet-Cookie: dsh-auth-test=leak\r\n\r\n`)
+    const extension = state.wsExtension ? `Sec-WebSocket-Extensions: ${state.wsExtension}\r\n` : ''
+    socket.write(`HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: ${accept}\r\n${extension}Set-Cookie: dsh-auth-test=leak\r\n\r\n`)
     state.sockets.add(socket)
     socket.on('close', () => state.sockets.delete(socket))
     socket.on('error', () => {})
-    socket.on('data', data => socket.write(data))
+    let received = Buffer.alloc(0)
+    let seen = 0
+    socket.on('data', (data) => {
+      received = Buffer.concat([received, data])
+      const frames = readFrames(received)
+      state.frames.push(...frames.slice(seen))
+      seen = frames.length
+      socket.write(data)
+    })
   })
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve))
   state.port = server.address().port

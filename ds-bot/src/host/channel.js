@@ -6,6 +6,7 @@ import { install as installSide } from './side.js'
 import { handoffReply, questionReply, viewReply } from './parts.js'
 import { validateViewAnswer } from 'deep-view/core'
 import { COLORS, EXTRA_COLORS, ROUTE } from './constants.js'
+import { AUTH_ENDPOINTS } from './auth.js'
 
 const LANGUAGES = { zh: 'Chinese (简体中文)', en: 'English' }
 const RUN_STATS = ['sessionStats', 'tokenUsage', 'contextPressure']
@@ -117,6 +118,10 @@ export function install(rt) {
   // What a host that only reads the team may still answer.
   // Updates change the dsh profile, not the team, so a reading host may run them too.
   const READS = new Set(['state', 'models', 'efforts', 'providers', 'provider-models', 'earlier', 'chat', 'run-stats', 'room-progress', 'exchange', 'exchange-text', 'file-text', 'usage', 'schedules', 'memory-view', 'browser-wait', 'browser-result', 'diagnostics', 'diagnostics-log', 'diagnostics-clear', 'update-check', 'update-install', 'dsh-update-install', 'repo-stars', 'approval-answer', 'thinking', 'avatar-library'])
+  // What a client without a corporate sign-in may still call: the reads it renders behind
+  // the sign-in gate, and the sign-in itself. Approving a tool call is an action, so it waits.
+  const SIGNED_OUT = new Set([...READS, ...AUTH_ENDPOINTS])
+  SIGNED_OUT.delete('approval-answer')
 
   async function setPrefs(body) {
     if (body.theme !== undefined) {
@@ -173,6 +178,7 @@ export function install(rt) {
       await rt.refresh()
       const readOnly = rt.readOnly()
       if (readOnly !== undefined && !READS.has(endpoint)) return fail(readOnly, 'bot/read-only')
+      if (rt.authLocked?.() && !SIGNED_OUT.has(endpoint)) return fail('Sign in with your corporate account first', 'bot/auth-required')
       switch (endpoint) {
         case 'state': {
           if (typeof body.locale === 'string' && /^[a-z]{2,3}(-[\w-]+)?$/i.test(body.locale)) uiLocale = body.locale

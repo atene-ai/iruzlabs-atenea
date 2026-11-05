@@ -231,14 +231,16 @@ const ZH = {
   'Exclusive Internal Access': '专属内部访问',
   'Authorized corporate accounts only:': '仅限授权企业账号：',
   'Waiting for authentication in your browser…': '等待在浏览器中完成身份验证…',
-  'OAuth client ID not configured. Use direct corporate sign-in below.': '未配置 OAuth 客户端 ID，请使用下方的企业邮箱直接登录。',
+  'This sign-in is not set up on this computer. Ask your administrator.': '这台电脑还没有设置这种登录方式，请联系管理员。',
   'Authentication failed': '身份验证失败',
   'Please enter your corporate email': '请输入您的企业邮箱',
-  'Access denied: email domain is not authorized. Only @iruzlabs.com and @azurylabs.online are permitted.': '访问被拒绝：邮箱域名未经授权。仅允许 @iruzlabs.com 和 @azurylabs.online。',
   'Complete sign-in in your browser, then return here.': '请在浏览器中完成登录，然后返回此处。',
   'Continue with Google Workspace': '通过 Google Workspace 继续',
   'Continue with Microsoft 365': '通过 Microsoft 365 继续',
-  'Or direct corporate access': '或直接企业邮箱访问',
+  'Direct sign-in (development)': '直接登录（开发用）',
+  'Sign in with your corporate account first': '请先用企业账号登录',
+  'Direct sign-in is turned off; sign in with Google or Microsoft': '直接登录已关闭，请用 Google 或 Microsoft 登录',
+  'Enter your corporate email': '请输入企业邮箱',
   'Corporate email': '企业邮箱',
   'Identity Provider': '身份提供商',
   'Sign in to Atenea': '登录 Atenea',
@@ -1211,6 +1213,7 @@ const ZH = {
 // Host errors stay English, since Bots read them too; they are translated where the
 // interface shows them. Static ones go through ZH, these carry names or numbers.
 const HOST_ERRORS = [
+  [/^Only accounts from (.+) can sign in$/, '只有 $1 的账号可以登录'],
   [/^Model (.+) is not available\. Available: (.*)$/, '模型 $1 不可用。可用的：$2'],
   [/^The API key for (.+) is set outside DS Bot and cannot be changed here$/, '$1 的 API key 是在 DS Bot 之外设置的，这里改不了'],
   [/^(.+) takes no API key here$/, '$1 不能在这里填 API key'],

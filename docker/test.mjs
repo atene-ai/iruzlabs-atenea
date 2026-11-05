@@ -125,6 +125,32 @@ try {
     test -w /data/profiles/web/package.json
   `])
   console.log('PASS: web startup and private data access under the new identity')
+  docker(['rm', '--force', server])
+  containers.delete(server)
+
+  const gatewayed = `${name}-server`
+  containers.add(gatewayed)
+  docker([
+    'run', '--detach', '--name', gatewayed, '--network', 'none', ...mounts(),
+    '-e', 'PUID=1234', '-e', 'PGID=1235', '-e', 'DSH_TELEMETRY_DISABLED=1',
+    '-e', 'ATENEA_SERVER_MODE=1', '-e', 'DSH_LAUNCH_URL_FILE=/run/atenea/dsh-launch-url', image,
+  ])
+  const launchDeadline = Date.now() + 45_000
+  let logs = ''
+  while (Date.now() < launchDeadline) {
+    const result = docker(['logs', gatewayed], { allowFailure: true })
+    logs = `${result.stdout}${result.stderr}`
+    if (logs.includes('dsh web: ready')) break
+    await setTimeout(300)
+  }
+  assert.match(logs, /dsh web: ready; launch URL written to \/run\/atenea\/dsh-launch-url/, `server mode must start dsh web:\n${logs}`)
+  assert.doesNotMatch(logs, /dsh web: http/, 'the launch URL must not reach the log')
+  docker(['exec', gatewayed, '/bin/sh', '-eu', '-c', `
+    test "$(stat -c %a:%u /run/atenea/dsh-launch-url)" = 600:1234
+    grep -q '^dsh web: http' /run/atenea/dsh-launch-url
+    test -z "$(find /tmp -maxdepth 1 -name 'dsh-stdout.*' -print -quit)"
+  `])
+  console.log('PASS: server mode writes the launch URL to its file, not the log')
 } finally {
   for (const container of containers) {
     docker(['rm', '--force', container], { allowFailure: true })

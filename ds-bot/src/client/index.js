@@ -50,6 +50,7 @@ import { noticeApprovals } from './approval-notices.js'
 import { listedOpener } from './open-listed.js'
 import { READ_ONLY_CSS, ReadOnlyComposer, installReadOnlyComposer, watchSubmissions } from './multiuser.js'
 import { SHARING_CSS } from './sharing.js'
+import { CRM_CSS } from './crm-card.js'
 
 export const inject = ['sessions', 'uiWorkspace', 'uiConversation', 'slots', 'theme', 'layout']
 
@@ -940,7 +941,7 @@ export function apply(ctx) {
     () => installCompiledStyles(SIDEBAR_CSS, 'sidebar'),
     () => installCompiledStyles(SECRET_CSS, 'secrets'),
     () => installCompiledStyles(LEARNING_CSS, 'learning'),
-    () => installCompiledStyles(MODEL_CSS + FOLDER_CSS + BOT_SETTINGS_CSS + GROUP_SETTINGS_CSS + AVATAR_LIBRARY_CSS + SHARING_CSS, 'models'),
+    () => installCompiledStyles(MODEL_CSS + FOLDER_CSS + BOT_SETTINGS_CSS + GROUP_SETTINGS_CSS + AVATAR_LIBRARY_CSS + SHARING_CSS + CRM_CSS, 'models'),
     () => installCompiledStyles(USAGE_CSS, 'usage'),
     () => installCompiledStyles(SCHEDULE_CSS, 'schedules'),
     () => installCompiledStyles(FEEDBACK_CSS, 'feedback'),

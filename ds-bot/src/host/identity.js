@@ -18,9 +18,25 @@ const LEEWAY_S = 10
 // HS256 with a shorter key is guessable offline from one captured token.
 const MIN_SECRET = 32
 const PART = /^[A-Za-z0-9_-]+$/
+// A kept SLA token counts as expired this long before its `exp`, so a call made with it
+// still reaches SLA in time.
+const TOKEN_MARGIN_MS = 30_000
+// A token whose expiry cannot be read is kept this long after the request that carried it.
+const UNKNOWN_LIFETIME_MS = 5 * 60_000
 
 const decode = part => JSON.parse(Buffer.from(part, 'base64url').toString('utf8'))
 const text = (value, max) => (typeof value === 'string' ? value.trim().slice(0, max) : '')
+
+// When a JWT says it expires, in ms, read without checking it: SLA checks the token, the
+// host only needs to know when to stop offering it.
+export function tokenExpiry(token) {
+  try {
+    const exp = decode(String(token).split('.')[1])?.exp
+    return Number.isFinite(exp) ? exp * 1000 : undefined
+  } catch {
+    return undefined
+  }
+}
 
 // Plugin config wins over the environment, as in auth.js.
 export function multiuserSettings(config = {}, env = process.env) {
@@ -103,12 +119,27 @@ export function install(rt) {
     }
     const raw = request.headers.get(SLA_TOKEN_HEADER) ?? ''
     const slaToken = raw.length > 0 && raw.length <= 8192 && !/\s/.test(raw) ? raw : undefined
+    if (slaToken !== undefined) kept.set(checked.identity.id, { identity: checked.identity, slaToken, until: tokenExpiry(slaToken) ?? now + UNKNOWN_LIFETIME_MS })
     return { identity: checked.identity, slaToken }
+  }
+
+  // Each person's latest identity and SLA token, in memory only, so work the host does
+  // for them outside a request (a Bot's CRM call in a turn they started) can still call
+  // SLA as them until that token runs out. Never written to disk or a log.
+  /** @type {Map<string, {identity:any, slaToken:string, until:number}>} */
+  const kept = new Map()
+  // `{ identity, slaToken }`, `{ expired: true }` once the token ran out, or undefined
+  // when no request of theirs brought one since the host started.
+  function keptContext(staffId, now = Date.now()) {
+    const entry = kept.get(staffId)
+    if (entry === undefined) return undefined
+    if (entry.until - TOKEN_MARGIN_MS <= now) return { expired: true, identity: entry.identity }
+    return { identity: entry.identity, slaToken: entry.slaToken }
   }
 
   const runAs = (context, run) => requests.run(context, run)
   const requestContext = () => requests.getStore()
   const viewer = () => requests.getStore()?.identity
 
-  Object.assign(rt, { multiuser: settings.multiuser === true, multiuserSettings: settings, identify, runAs, requestContext, viewer })
+  Object.assign(rt, { multiuser: settings.multiuser === true, multiuserSettings: settings, identify, runAs, requestContext, viewer, keptContext })
 }

@@ -28,9 +28,11 @@ const capitalize = word => word[0].toUpperCase() + word.slice(1)
 // Settings dialog: a 198px page list beside the page. Bots and group chats each list
 // their members, and one opens on its own settings form. Usage widens the dialog.
 // Models is there wherever the host serves the model providers, beside DSH's own settings.
-// Pages that change the whole team (model keys, connectors, the capability library,
-// usage, keys, diagnostics). On a shared server only a superadmin sees them.
-const TEAM_PAGES = new Set(['models', 'connectors', 'capabilities', 'usage', 'secrets', 'feedback'])
+// Pages that change the whole team (model keys, the capability library, usage, keys,
+// diagnostics). On a shared server only a superadmin sees them. Connectors stays for
+// everyone there: it holds each person's own CRM card, and the team's connectors on it
+// are for superadmins only.
+const TEAM_PAGES = new Set(['models', 'capabilities', 'usage', 'secrets', 'feedback'])
 const staffOnly = roster => roster.multiuser === true && roster.viewer?.superadmin !== true
 const SETTINGS_PAGES = [['general', 'General'], ['models', 'Models'], ['bots', 'Bots'], ['groups', 'Group chats'], ['connectors', 'Connectors'], ['capabilities', 'Capabilities'], ['browser', 'Browser'], ['schedules', 'Scheduled tasks'], ['usage', 'Usage'], ['secrets', 'Secrets'], ['feedback', 'Feedback'], ['about', 'About DS Bot']]
 const PAGE_ICONS = { ...SETTINGS_ICONS, models: SlidersIcon, connectors: ConnectorIcon, capabilities: PlugIcon, browser: ConnectorIcon, schedules: ClockIcon, secrets: KeyIcon, feedback: FeedbackIcon, about: InfoIcon }

@@ -205,7 +205,10 @@ const CONNECTOR_DEFS = {
       serverName: LINEAR,
       command: options.command,
       args: options.args,
-      env: { LINEAR_API_KEY: token, ...options.env },
+      // This server reads only LINEAR_API_TOKEN (or --token) and exits without it,
+      // which the MCP client reports as "Connection closed"; its own docs say
+      // LINEAR_API_KEY, so both are set.
+      env: { LINEAR_API_TOKEN: token, LINEAR_API_KEY: token, ...options.env },
       failOnStartupError: true,
     }),
   },

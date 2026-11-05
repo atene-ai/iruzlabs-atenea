@@ -178,6 +178,12 @@ export function teamActions({ call, after, partFor, roster, ui, live, cards, hel
     claimBot: id => after(call('claim-bot', { id })),
     claimAuthor: (sessionId, requestId) => call('author', { sessionId, requestId }),
     authors: ids => call('authors', { ids }),
+    // The person's CRM card: their own CRM link, their SLA accounts, and what the Bots
+    // they own may do in the CRM on their own.
+    crmView: () => call('crm-view'),
+    crmLinkStart: () => call('crm-link-start'),
+    crmUnlink: () => call('crm-unlink'),
+    crmUnattended: (botId, mode) => call('crm-unattended', { botId, mode }),
     // A failed action away from any form (a menu, the palette) shows as a toast.
     reportError: (error, where = 'action') => {
       noteClientError(where, error)

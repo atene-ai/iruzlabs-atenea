@@ -57,7 +57,7 @@ const textOf = (node) => {
 
 // `status` is what the account plugin's snapshot reports; `running` is what its
 // hasRunningAccountTasks answers (or throws); `fail` makes signOut reject.
-function launcher({ status = 'credential-stored', running = false, runningError = false, fail = '', withEntry = true, actions = {} } = {}) {
+function launcher({ status = 'credential-stored', running = false, runningError = false, fail = '', withEntry = true, actions = {}, roster } = {}) {
   const calls = []
   slots.length = 0
   const ops = {
@@ -67,6 +67,7 @@ function launcher({ status = 'credential-stored', running = false, runningError 
   }
   const props = {
     seat: false,
+    roster,
     actions: {
       signInEntry: () => ((typeof withEntry === 'function' ? withEntry() : withEntry) ? { inject: () => ops } : null),
       accountT: () => key => `acc:${key}`,
@@ -188,6 +189,39 @@ test('Sign in to DeepSeek shows only while the account plugin says signed out', 
   assert.equal(loading.item(loading.open(), 'Sign in to DeepSeek'), undefined)
   const entryless = launcher({ status: 'signed-out', withEntry: false, actions })
   assert.equal(entryless.item(entryless.open(), 'Sign in to DeepSeek'), undefined)
+})
+
+// IRU-927: on a shared server the menu showed the server's desktop sign-in, and its
+// Sign out answered "Sign-in is handled by the Atenea server".
+test('on a shared server the menu shows the signed-in person and signs out through the gateway', () => {
+  const calls = []
+  const roster = {
+    multiuser: true,
+    viewer: { id: 's1', name: 'Ana Ruiz', email: 'ana@iruzlabs.com', role: 'support', superadmin: false },
+    auth: { user: { name: 'Server Owner', email: 'owner@iruzlabs.com', provider: 'google' } },
+  }
+  const actions = { serverSignOut: () => calls.push('server'), authSignOut: () => calls.push('desktop') }
+  const side = launcher({ roster, actions })
+  const menu = side.open()
+  const [card] = walk(menu, node => node.props?.className === 'bt-account-user')
+  assert.match(textOf(card), /Ana Ruiz/)
+  assert.match(textOf(card), /ana@iruzlabs\.com/)
+  assert.match(textOf(card), /Support/)
+  assert.doesNotMatch(textOf(card), /Server Owner|Google Workspace/)
+  // The shell's own account is the server's, so its sign-out is not offered here.
+  assert.equal(side.item(menu, 'acc:signOut'), undefined)
+  side.item(menu, 'Sign out').props.onClick()
+  assert.deepEqual(calls, ['server'])
+})
+
+test('outside a shared server Sign out still ends the desktop sign-in', () => {
+  const calls = []
+  const roster = { auth: { user: { name: 'Luis', email: 'luis@iruzlabs.com', provider: 'microsoft' } } }
+  const side = launcher({ roster, actions: { serverSignOut: () => calls.push('server'), authSignOut: () => calls.push('desktop') } })
+  const menu = side.open()
+  assert.match(textOf(walk(menu, node => node.props?.className === 'bt-account-user')), /Microsoft 365/)
+  side.item(menu, 'Sign out').props.onClick()
+  assert.deepEqual(calls, ['desktop'])
 })
 
 // #452: the Connect plugins button left the Bot footer; the account menu that

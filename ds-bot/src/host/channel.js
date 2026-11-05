@@ -482,6 +482,8 @@ export function install(rt) {
           if (reply === undefined) return fail('Nothing to send', 'bot/invalid')
           // Claim the question before queueing so a second answer is refused.
           delete state.questions[sessionId]
+          // On a shared server the turn the answer opens acts for whoever answered (crm.js).
+          rt.noteCardAnswer?.(sessionId, rt.viewer?.())
           try {
             await rt.ensureCapabilities(sessionId)
             const agent = await rt.resolveAgent(sessionId)
@@ -507,6 +509,7 @@ export function install(rt) {
           if (reply === undefined) return fail('Nothing to send', 'bot/invalid')
           // Claim the view before queueing so a second answer is refused.
           delete state.views[sessionId]
+          rt.noteCardAnswer?.(sessionId, rt.viewer?.())
           try {
             await rt.ensureCapabilities(sessionId)
             const agent = await rt.resolveAgent(sessionId)
@@ -667,6 +670,14 @@ export function install(rt) {
         case 'authors':
           await rt.load()
           return ok(await rt.accessEndpoint(endpoint, body))
+        // The CRM card: each person's own CRM link, their SLA accounts, and what the
+        // Bots they own may do in the CRM on their own (crm.js).
+        case 'crm-view':
+        case 'crm-link-start':
+        case 'crm-unlink':
+        case 'crm-unattended':
+          await rt.load()
+          return ok(await rt.crmEndpoint(endpoint, body))
         default:
           return fail(`Unknown endpoint ${endpoint}`, 'bot/not-found')
       }

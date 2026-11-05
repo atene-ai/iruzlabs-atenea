@@ -1208,11 +1208,35 @@ const ZH = {
   'Up one level': '上一级',
   'No folders inside.': '里面没有文件夹。',
   'Some folders are not shown.': '还有一些文件夹没有显示。',
+  // A shared Atenea server: sharing, read-only chats and who wrote what.
+  'You can only view this group chat': '你只能查看这个群聊',
+  'Readers can only view this agent': '只读成员只能查看这个 agent',
+  'Every agent in it must be shared with you as an editor to send messages.': '群里每个 agent 都以编辑者身份共享给你后，才能发消息。',
+  'Ask its owner for editor access to send messages.': '请让它的所有者给你编辑权限，才能发消息。',
+  Owner: '所有者',
+  Editor: '编辑者',
+  Reader: '只读',
+  Sharing: '共享',
+  'Remove?': '确定移除？',
+  'Click again to remove {name}': '再点一次移除 {name}',
+  'Access for {name}': '{name} 的权限',
+  'Search staff by name or email': '按姓名或邮箱搜索员工',
+  'Search staff': '搜索员工',
+  'No one found': '没有找到',
+  'Not registered': '未登记',
+  'No owner': '没有所有者',
+  'Only superadmins see this agent until it has an owner in SLA.': '在 SLA 里有所有者之前，只有超级管理员能看到这个 agent。',
+  'Register me as owner': '登记我为所有者',
+  'View only': '仅查看',
+  'You can view this agent. Only its owner and editors can change it.': '你可以查看这个 agent，只有它的所有者和编辑者能修改它。',
+  'Your colors, on every device.': '你自己的配色，在每台设备上都一样。',
 }
 
 // Host errors stay English, since Bots read them too; they are translated where the
 // interface shows them. Static ones go through ZH, these carry names or numbers.
 const HOST_ERRORS = [
+  [/^Could not register the agent in SLA([\s\S]*)$/, '无法在 SLA 里登记这个 agent$1'],
+  [/^SLA answered ([\s\S]*)$/, 'SLA 返回了 $1'],
   [/^Only accounts from (.+) can sign in$/, '只有 $1 的账号可以登录'],
   [/^Model (.+) is not available\. Available: (.*)$/, '模型 $1 不可用。可用的：$2'],
   [/^The API key for (.+) is set outside DS Bot and cannot be changed here$/, '$1 的 API key 是在 DS Bot 之外设置的，这里改不了'],
@@ -1317,6 +1341,20 @@ const HOST_ZH = {
   'Nothing to cancel': '没有要取消的内容',
   'Nothing to close': '没有要关闭的内容',
   'DS Bot is still loading this chat.': 'DS Bot 还在加载这个对话。',
+  'Only the owner of this agent can do this': '只有这个 agent 的所有者能这样做',
+  'Only a superadmin can do this': '只有超级管理员能这样做',
+  'Only a superadmin can work with a Main Bot': '只有超级管理员能使用主 Bot',
+  'Sign in to Atenea first': '请先登录 Atenea',
+  'Sign-in is handled by the Atenea server': '登录由 Atenea 服务器处理',
+  'Sharing is only available on a shared Atenea server': '只有共享的 Atenea 服务器才能共享',
+  'SLA is not configured on this server': '这台服务器没有配置 SLA',
+  'Choose editor or reader': '请选择编辑者或只读',
+  'Type at least 2 characters to search': '至少输入 2 个字符再搜索',
+  'Name the person to share with': '请指定要共享给谁',
+  'Unknown agent': '找不到这个 agent',
+  'Readers can only view this group chat': '只读成员只能查看这个群聊',
+  'This action is not available on a shared Atenea server': '共享的 Atenea 服务器上不能这样做',
+  'Only a superadmin can change the team memory': '只有超级管理员能修改团队记忆',
 }
 Object.assign(ZH, HOST_ZH)
 

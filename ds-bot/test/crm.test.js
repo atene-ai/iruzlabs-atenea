@@ -27,6 +27,9 @@ const PA1 = '11111111-1111-4111-8111-111111111111'
 const PA2 = '22222222-2222-4222-8222-222222222222'
 const SUB1 = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
 const SUB2 = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'
+// SLA's workspaces of each account: the CRM subaccounts SUB1 and SUB2.
+const WS1 = '33333333-3333-4333-8333-333333333333'
+const WS2 = '44444444-4444-4444-8444-444444444444'
 const OWN_SUB = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc'
 const LEAD1 = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd'
 const LEAD2 = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee'
@@ -75,8 +78,8 @@ const json = (body, status = 200) => new Response(status === 204 ? null : JSON.s
 const ME = {
   staff: { id: 'u-ana', email: 'ana@example.com', displayName: 'Ana García', role: 'product_lead' },
   accounts: [
-    { productAccountId: PA1, productCode: 'atenea', sourceSystem: 'sales-os', externalId: SUB1, name: 'Cliente Uno', accessLevel: 'operator' },
-    { productAccountId: PA2, productCode: 'atenea', sourceSystem: 'sales-os', externalId: SUB2, name: 'Cliente Dos', accessLevel: 'viewer' },
+    { productAccountId: PA1, productCode: 'sales-os', sourceSystem: 'sales-os', externalId: 'acc-uno', name: 'Cliente Uno', accessLevel: 'operator', workspaces: [{ workspaceId: WS1, externalId: SUB1, name: 'Principal' }] },
+    { productAccountId: PA2, productCode: 'sales-os', sourceSystem: 'sales-os', externalId: 'acc-dos', name: 'Cliente Dos', accessLevel: 'viewer', workspaces: [{ workspaceId: WS2, externalId: SUB2, name: 'Principal' }] },
     { productAccountId: '99999999-9999-4999-8999-999999999999', productCode: 'contractors', sourceSystem: 'contractors', externalId: 'x-1', name: 'Other product', accessLevel: 'operator' },
   ],
 }
@@ -213,11 +216,37 @@ test('a turn the person started acts for them, with their SLA token and accounts
   await asked()
   const text = await tool('crm_list_accounts')
   assert.match(text, /Acting for Ana García, who asked/)
-  assert.match(text, /Cliente Uno: account "sla:11111111-1111-4111-8111-111111111111", read and change/)
-  assert.match(text, /Cliente Dos: account "sla:22222222-2222-4222-8222-222222222222", read only/)
+  assert.match(text, /Cliente Uno · Principal: account "sla:11111111-1111-4111-8111-111111111111:33333333-3333-4333-8333-333333333333", read and change/)
+  assert.match(text, /Cliente Dos · Principal: account "sla:22222222-2222-4222-8222-222222222222:44444444-4444-4444-8444-444444444444", read only/)
   assert.doesNotMatch(text, /Other product/)
   const me = slaCalls.find(entry => entry.path === '/api/atenea/me')
   assert.equal(me.auth, `Bearer ${slaToken}`)
+})
+
+test('each CRM subaccount of an SLA account is its own account, and its grant names that workspace', async (t) => {
+  const WS3 = '55555555-5555-4555-8555-555555555555'
+  const SUB3 = 'ffffffff-ffff-4fff-8fff-ffffffffffff'
+  const me = {
+    ...ME,
+    accounts: [
+      { ...ME.accounts[0], workspaces: [{ workspaceId: WS1, externalId: SUB1, name: 'Principal' }, { workspaceId: WS3, externalId: SUB3, name: 'Norte' }] },
+      // An SLA that does not list workspaces yet: its account id is not a CRM subaccount.
+      { ...ME.accounts[1], workspaces: undefined },
+    ],
+  }
+  const { call, asked, tool, slaCalls, crmCalls, stop } = start({ sla: entry => (entry.path === '/api/atenea/me' ? json(me) : undefined) })
+  t.after(stop)
+  await call('state')
+  await asked()
+  const text = await tool('crm_list_accounts')
+  assert.match(text, new RegExp(`Cliente Uno · Principal: account "sla:${PA1}:${WS1}"`))
+  assert.match(text, new RegExp(`Cliente Uno · Norte: account "sla:${PA1}:${WS3}"`))
+  assert.doesNotMatch(text, /Cliente Dos/)
+  await assert.rejects(tool('crm_search_leads', { account: 'Cliente Uno' }), /names several accounts/)
+  await tool('crm_search_leads', { account: `sla:${PA1}:${WS3}` })
+  const grant = slaCalls.find(entry => entry.path === '/api/atenea/grants')
+  assert.equal(grant.body.workspaceId, WS3)
+  assert.equal(crmCalls.at(-1).query.subaccountId, SUB3)
 })
 
 test('a turn no person started is refused unless the owner allowed it, and then acts for the owner', async (t) => {
@@ -225,7 +254,7 @@ test('a turn no person started is refused unless the owner allowed it, and then 
   t.after(stop)
   await call('state')
   turn('b2', { kind: SOURCE_KIND, role: 'request', senderSessionId: 'b1' })
-  await assert.rejects(tool('crm_search_leads', { account: `sla:${PA1}` }, 'b2'), /No person started this turn.*has not let it use the CRM on its own/)
+  await assert.rejects(tool('crm_search_leads', { account: `sla:${PA1}:${WS1}` }, 'b2'), /No person started this turn.*has not let it use the CRM on its own/)
   assert.equal(crmCalls.length, 0)
   // Someone who is not its registered owner cannot allow it.
   assert.equal((await call('crm-unattended', { botId: 'b2', mode: 'read' }, LUIS)).error.code, 'bot/not-found')
@@ -233,10 +262,10 @@ test('a turn no person started is refused unless the owner allowed it, and then 
   const view = (await call('crm-unattended', { botId: 'b2', mode: 'read' })).value
   assert.equal(view.bots.find(bot => bot.id === 'b2').unattended, 'read')
   assert.match(await tool('crm_list_accounts', {}, 'b2'), /act for your owner, Ana García, with reading only/)
-  await tool('crm_search_leads', { account: `sla:${PA1}` }, 'b2')
+  await tool('crm_search_leads', { account: `sla:${PA1}:${WS1}` }, 'b2')
   // Reading only: a change is refused before the CRM sees it, even on an operator account.
   const before = crmCalls.length
-  await assert.rejects(tool('crm_create_lead', { account: `sla:${PA1}`, name: 'Eva', phone: '525511112222' }, 'b2'), /may only read in the CRM in turns no person started/)
+  await assert.rejects(tool('crm_create_lead', { account: `sla:${PA1}:${WS1}`, name: 'Eva', phone: '525511112222' }, 'b2'), /may only read in the CRM in turns no person started/)
   assert.equal(crmCalls.length, before)
 })
 
@@ -294,22 +323,22 @@ test('a grant is asked once per account and mode, kept until it nears its end, a
   t.after(stop)
   await call('state')
   await asked()
-  await tool('crm_search_leads', { account: `sla:${PA1}`, search: 'ana' })
+  await tool('crm_search_leads', { account: `sla:${PA1}:${WS1}`, search: 'ana' })
   await tool('crm_get_lead', { account: 'Cliente Uno', lead_id: LEAD1 })
   const grantCalls = () => slaCalls.filter(entry => entry.path === '/api/atenea/grants')
   assert.equal(grantCalls().length, 1)
-  assert.deepEqual(grantCalls()[0].body, { productAccountId: PA1, mode: 'read', reason: 'Atenea: Seller for Ana García (crm_search_leads)' })
+  assert.deepEqual(grantCalls()[0].body, { productAccountId: PA1, workspaceId: WS1, mode: 'read', reason: 'Atenea: Seller for Ana García (crm_search_leads)' })
   assert.equal(crmCalls[0].headers.Authorization, crmCalls[1].headers.Authorization)
   assert.match(crmCalls[0].headers.Authorization, /^Bearer test-grant-/)
   assert.equal(crmCalls[0].query.subaccountId, SUB1)
   assert.equal(crmCalls[0].query.search, 'ana')
   // A write asks for an operate grant of its own.
-  await tool('crm_create_lead', { account: `sla:${PA1}`, name: 'Eva', phone: '525511112222' })
+  await tool('crm_create_lead', { account: `sla:${PA1}:${WS1}`, name: 'Eva', phone: '525511112222' })
   assert.deepEqual(grantCalls().map(entry => entry.body.mode), ['read', 'operate'])
   // A grant with less than the margin left is not reused.
   life = 30_000
-  await tool('crm_search_leads', { account: `sla:${PA2}` })
-  await tool('crm_search_leads', { account: `sla:${PA2}` })
+  await tool('crm_search_leads', { account: `sla:${PA2}:${WS2}` })
+  await tool('crm_search_leads', { account: `sla:${PA2}:${WS2}` })
   assert.equal(grantCalls().filter(entry => entry.body.productAccountId === PA2).length, 2)
 })
 
@@ -328,7 +357,7 @@ test('a grant the CRM calls expired is replaced once, and SLA\'s refusals are ex
   t.after(stop)
   await call('state')
   await asked()
-  await tool('crm_search_leads', { account: `sla:${PA1}` })
+  await tool('crm_search_leads', { account: `sla:${PA1}:${WS1}` })
   assert.equal(slaCalls.filter(entry => entry.path === '/api/atenea/grants').length, 2)
   assert.equal(crmFailureText({ status: 403, said: 'insufficient' }, { via: 'own' }), 'The CRM refused: your CRM user may not do this in that account: insufficient.')
 })
@@ -346,7 +375,7 @@ test('a change in read mode is refused before SLA or the CRM is asked', async (t
     ['crm_import_leads', { file: 'leads.csv' }],
     ['crm_start_conversation', { lead_ids: [LEAD1], channel_id: CHANNEL, template_id: TEMPLATE }],
   ]) {
-    await assert.rejects(tool(name, { account: `sla:${PA2}`, ...args }), /Ana García can only read in Cliente Dos/, name)
+    await assert.rejects(tool(name, { account: `sla:${PA2}:${WS2}`, ...args }), /Ana García can only read in Cliente Dos/, name)
   }
   assert.equal(crmCalls.length, 0)
   assert.equal(slaCalls.filter(entry => entry.path === '/api/atenea/grants').length, grantsBefore)
@@ -367,9 +396,9 @@ test('the CRM\'s refusals of a staff grant, and its author limit, come back in p
   writeFileSync(join(work, 'leads.csv'), 'Nombre,Telefono\nEva,525511112222\n')
   await call('state')
   await asked()
-  await assert.rejects(tool('crm_import_leads', { account: `sla:${PA1}`, file: 'leads.csv' }), /records who made it, and it cannot record a staff member yet/)
-  await assert.rejects(tool('crm_create_lead', { account: `sla:${PA1}`, name: 'Eva', phone: '525511112222' }), /staff grant only allows reading/)
-  await assert.rejects(tool('crm_get_lead', { account: `sla:${PA1}`, lead_id: LEAD1 }), /keeps this action for the account's own users/)
+  await assert.rejects(tool('crm_import_leads', { account: `sla:${PA1}:${WS1}`, file: 'leads.csv' }), /records who made it, and it cannot record a staff member yet/)
+  await assert.rejects(tool('crm_create_lead', { account: `sla:${PA1}:${WS1}`, name: 'Eva', phone: '525511112222' }), /staff grant only allows reading/)
+  await assert.rejects(tool('crm_get_lead', { account: `sla:${PA1}:${WS1}`, lead_id: LEAD1 }), /keeps this action for the account's own users/)
   assert.match(crmFailureText({ status: 403, said: 'Esta concesión no cubre esa subcuenta' }, { via: 'grant' }), /another subaccount/)
 })
 
@@ -378,8 +407,8 @@ test('a staff grant does not send messages: the CRM would deliver before failing
   t.after(stop)
   await call('state')
   await asked()
-  await assert.rejects(tool('crm_send_message', { account: `sla:${PA1}`, conversation_id: CONV, text: 'hola' }), /A staff grant cannot send messages yet/)
-  await assert.rejects(tool('crm_start_conversation', { account: `sla:${PA1}`, lead_ids: [LEAD1], channel_id: CHANNEL, template_id: TEMPLATE }), /A staff grant cannot send messages yet/)
+  await assert.rejects(tool('crm_send_message', { account: `sla:${PA1}:${WS1}`, conversation_id: CONV, text: 'hola' }), /A staff grant cannot send messages yet/)
+  await assert.rejects(tool('crm_start_conversation', { account: `sla:${PA1}:${WS1}`, lead_ids: [LEAD1], channel_id: CHANNEL, template_id: TEMPLATE }), /A staff grant cannot send messages yet/)
   assert.equal(crmCalls.filter(entry => entry.method === 'POST').length, 0)
 })
 
@@ -391,7 +420,7 @@ test('with ATENEA_CRM_STAFF_AUTHORS a staff grant sends', async (t) => {
   t.after(stop)
   await call('state')
   await asked()
-  assert.match(await tool('crm_send_message', { account: `sla:${PA1}`, conversation_id: CONV, text: 'hola' }), /Sent \(message m1, SENT\)/)
+  assert.match(await tool('crm_send_message', { account: `sla:${PA1}:${WS1}`, conversation_id: CONV, text: 'hola' }), /Sent \(message m1, SENT\)/)
   assert.deepEqual(crmCalls.at(-1).body, { body: 'hola' })
 })
 
@@ -554,14 +583,14 @@ test('arguments are checked before anything leaves the host', async (t) => {
   await call('state')
   await asked()
   const grantsBefore = slaCalls.filter(entry => entry.path === '/api/atenea/grants').length
-  await assert.rejects(tool('crm_get_lead', { account: `sla:${PA1}`, lead_id: 'Eva' }), /lead_id must be a CRM id/)
-  await assert.rejects(tool('crm_create_lead', { account: `sla:${PA1}`, name: 'Eva' }), /needs an e-mail address or a phone number/)
-  await assert.rejects(tool('crm_create_lead', { account: `sla:${PA1}`, name: 'Eva', phone: '12' }), /phone must be 6 to 15 digits/)
-  await assert.rejects(tool('crm_search_leads', { account: `sla:${PA1}`, limit: 500 }), /limit must be a whole number from 1 to 50/)
-  await assert.rejects(tool('crm_import_leads', { account: `sla:${PA1}` }), /Give either file/)
-  await assert.rejects(tool('crm_import_leads', { account: `sla:${PA1}`, file: 'leads.pdf' }), /imports .csv or .xlsx/)
-  await assert.rejects(tool('crm_start_conversation', { account: `sla:${PA1}`, channel_id: CHANNEL }), /both channel_id and template_id/)
-  await assert.rejects(tool('crm_send_message', { account: `sla:${PA1}`, conversation_id: CONV, text: 'x'.repeat(5000) }), /at most 4096/)
+  await assert.rejects(tool('crm_get_lead', { account: `sla:${PA1}:${WS1}`, lead_id: 'Eva' }), /lead_id must be a CRM id/)
+  await assert.rejects(tool('crm_create_lead', { account: `sla:${PA1}:${WS1}`, name: 'Eva' }), /needs an e-mail address or a phone number/)
+  await assert.rejects(tool('crm_create_lead', { account: `sla:${PA1}:${WS1}`, name: 'Eva', phone: '12' }), /phone must be 6 to 15 digits/)
+  await assert.rejects(tool('crm_search_leads', { account: `sla:${PA1}:${WS1}`, limit: 500 }), /limit must be a whole number from 1 to 50/)
+  await assert.rejects(tool('crm_import_leads', { account: `sla:${PA1}:${WS1}` }), /Give either file/)
+  await assert.rejects(tool('crm_import_leads', { account: `sla:${PA1}:${WS1}`, file: 'leads.pdf' }), /imports .csv or .xlsx/)
+  await assert.rejects(tool('crm_start_conversation', { account: `sla:${PA1}:${WS1}`, channel_id: CHANNEL }), /both channel_id and template_id/)
+  await assert.rejects(tool('crm_send_message', { account: `sla:${PA1}:${WS1}`, conversation_id: CONV, text: 'x'.repeat(5000) }), /at most 4096/)
   await assert.rejects(tool('crm_search_leads', { account: 'Nobody' }), /No CRM account "Nobody"/)
   assert.equal(crmCalls.length, 0)
   assert.equal(slaCalls.filter(entry => entry.path === '/api/atenea/grants').length, grantsBefore)
@@ -737,7 +766,7 @@ test('the CRM card answers each person with their own link, accounts and Bots', 
   const view = (await call('crm-view')).value
   assert.equal(view.link.ready, true)
   assert.equal(view.link.linked, false)
-  assert.deepEqual(view.accounts.map(account => [account.ref, account.level]), [[`sla:${PA1}`, 'operate'], [`sla:${PA2}`, 'read']])
+  assert.deepEqual(view.accounts.map(account => [account.ref, account.level]), [[`sla:${PA1}:${WS1}`, 'operate'], [`sla:${PA2}:${WS2}`, 'read']])
   assert.deepEqual(view.bots.map(bot => bot.id), ['b1', 'b2'])
   assert.equal((await call('crm-view', {}, LUIS)).value.bots.map(bot => bot.id).join(), 'b4')
   assert.equal((await call('crm-unattended', { botId: 'b2', mode: 'everything' })).error.code, 'bot/invalid')

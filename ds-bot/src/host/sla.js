@@ -44,9 +44,9 @@ export function install(rt) {
     deleteShare: (botId, staffUserId) => request('DELETE', `${agentPath(botId)}/shares/${encodeURIComponent(staffUserId)}`),
     searchStaff: q => request('GET', `api/atenea/staff?${new URLSearchParams({ q })}`),
     // The person's products and customer accounts with their level, and a short grant
-    // to act in one account in the CRM (crm.js).
+    // to act in one subaccount (workspace) of an account in the CRM (crm.js).
     me: () => request('GET', 'api/atenea/me'),
-    grant: ({ productAccountId, mode, reason }) => request('POST', 'api/atenea/grants', { productAccountId, mode, reason }),
+    grant: ({ productAccountId, workspaceId, mode, reason }) => request('POST', 'api/atenea/grants', { productAccountId, workspaceId, mode, reason }),
     // Never blocks or fails the action it records: a lost audit line is only logged.
     audit(entry) {
       void request('POST', 'api/atenea/audit', entry)

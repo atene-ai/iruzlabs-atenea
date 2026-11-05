@@ -271,18 +271,29 @@ export function install(rt) {
     return promise
   }
 
+  // SLA assigns CRM accounts and lists each one's subaccounts as workspaces; the CRM
+  // answers per subaccount, so each workspace is one account here and its grant names it.
+  // An SLA without workspaces lists none rather than send an account id as a subaccount.
   const slaAccounts = acting => cached(slaCache, acting.person.id, async () => {
     const me = await asPerson(acting, () => rt.sla.me())
     return (Array.isArray(me?.accounts) ? me.accounts : [])
-      .filter(entry => entry?.sourceSystem === settings.sourceSystem && str(entry.productAccountId) !== '' && str(entry.externalId) !== '')
-      .map(entry => ({
-        ref: `sla:${entry.productAccountId}`,
-        via: 'grant',
-        productAccountId: entry.productAccountId,
-        subaccountId: entry.externalId,
-        name: str(entry.name).trim().slice(0, 120) || entry.externalId,
-        level: entry.accessLevel === 'operator' ? 'operate' : 'read',
-      }))
+      .filter(entry => entry?.sourceSystem === settings.sourceSystem && str(entry.productAccountId) !== '' && Array.isArray(entry.workspaces))
+      .flatMap((entry) => {
+        const account = str(entry.name).trim().slice(0, 120) || entry.productAccountId
+        const level = entry.accessLevel === 'operator' ? 'operate' : 'read'
+        return entry.workspaces
+          .filter(workspace => str(workspace?.workspaceId) !== '' && str(workspace?.externalId) !== '')
+          .map(workspace => ({
+            ref: `sla:${entry.productAccountId}:${workspace.workspaceId}`,
+            via: 'grant',
+            productAccountId: entry.productAccountId,
+            workspaceId: workspace.workspaceId,
+            subaccountId: workspace.externalId,
+            accountName: account,
+            name: `${account} · ${str(workspace.name).trim().slice(0, 120) || workspace.externalId}`,
+            level,
+          }))
+      })
   })
 
   const ownAccounts = acting => cached(ownCache, acting.person.id, async () => {
@@ -311,7 +322,8 @@ export function install(rt) {
     const exact = accounts.find(account => account.ref === ref)
     if (exact !== undefined) return exact
     const lower = ref.toLowerCase()
-    const matches = accounts.filter(account => account.productAccountId === ref || account.subaccountId === ref || account.name.toLowerCase() === lower)
+    // An SLA account's own name names it while it has one subaccount; with more, pick one.
+    const matches = accounts.filter(account => account.productAccountId === ref || account.subaccountId === ref || account.name.toLowerCase() === lower || account.accountName?.toLowerCase() === lower)
     if (matches.length === 1) return matches[0]
     if (matches.length > 1) throw refusal(`"${ref}" names several accounts: ${matches.map(account => `${account.name} (${account.ref})`).join(', ')}. Use one ref.`)
     const known = accounts.map(account => `${account.name} (${account.ref})`).join(', ')
@@ -326,7 +338,7 @@ export function install(rt) {
 
   /** @type {Map<string, {grant?:string, until?:number, promise?:Promise<any>}>} */
   const grants = new Map()
-  const grantKey = (acting, account, mode) => `${acting.person.id}\n${account.productAccountId}\n${mode}`
+  const grantKey = (acting, account, mode) => `${acting.person.id}\n${account.productAccountId}\n${account.workspaceId}\n${mode}`
   function grantFor(acting, account, mode, reason) {
     const key = grantKey(acting, account, mode)
     const held = grants.get(key)
@@ -335,7 +347,7 @@ export function install(rt) {
     const promise = (async () => {
       let answer
       try {
-        answer = await asPerson(acting, () => rt.sla.grant({ productAccountId: account.productAccountId, mode, reason }))
+        answer = await asPerson(acting, () => rt.sla.grant({ productAccountId: account.productAccountId, workspaceId: account.workspaceId, mode, reason }))
       } catch (error) {
         if (error?.status === 403) slaCache.delete(acting.person.id)
         throw refusal(error?.code === 'bot/refused' && error.status === undefined ? error.message : grantFailureText(error, account, mode))

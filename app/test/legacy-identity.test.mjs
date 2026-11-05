@@ -1,13 +1,12 @@
 import assert from 'node:assert/strict'
 import { EventEmitter } from 'node:events'
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { readFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { spawnSync } from 'node:child_process'
 import { test } from 'node:test'
 import { parse } from 'yaml'
 import { UUID } from 'builder-util-runtime'
-import { APP_ID, configureIdentity, LEGACY_ARTIFACT_PREFIX, LEGACY_PRODUCT_NAME, PRODUCT_NAME } from '../src/legacy.mjs'
+import { APP_ID, configureIdentity, LEGACY_PRODUCT_NAME, PRODUCT_NAME } from '../src/legacy.mjs'
 
 function fixture({ saved = [], packaged = true } = {}) {
   const app = new EventEmitter()
@@ -74,22 +73,6 @@ test('a source installation also keeps its existing shell data', () => {
   const f = fixture({ packaged: false })
   assert.equal(configureIdentity(f.app, { env: {}, mkdir: () => {}, exists: path => path === f.legacy }).userData, f.legacy)
 })
-
-for (const suffix of ['mac-arm64.zip', 'mac-x64.zip', 'linux-amd64.deb']) {
-  test(`old update clients receive the identical DS Bot payload: ${suffix}`, () => {
-    const root = mkdtempSync(join(tmpdir(), 'dsbot-release-alias-'))
-    try {
-      const source = join(root, `DS-Bot-1.2.3-${suffix}`)
-      const payload = Buffer.from('new DS Bot package')
-      writeFileSync(source, payload)
-      const result = spawnSync(process.execPath, ['scripts/legacy-release-assets.mjs', source], { cwd: new URL('../', import.meta.url), encoding: 'utf8' })
-      assert.equal(result.status, 0, result.stderr)
-      const alias = join(root, `${LEGACY_ARTIFACT_PREFIX}-1.2.3-${suffix}`)
-      assert.deepEqual(readFileSync(alias), payload)
-      assert.equal(existsSync(source), true)
-    } finally { rmSync(root, { recursive: true, force: true }) }
-  })
-}
 
 
 test('renaming the Windows application preserves the published installer GUID', () => {

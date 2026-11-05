@@ -43,7 +43,8 @@ RUN apt-get update \
 COPY --from=build /usr/local/ /usr/local/
 COPY --from=build /opt/dsh-template /opt/dsh-template
 # The packed plugin, pnpm itself (corepack's copy), and pnpm's metadata cache and store
-# from the install, so the entrypoint can install it into an existing volume offline.
+# from the install, so the entrypoint can install it into an existing volume without the
+# network when the volume's lockfile asks for nothing more.
 COPY --from=build /opt/ds-bot/ /opt/ds-bot/
 COPY --from=build /root/.cache/node/corepack /root/.cache/node/corepack
 COPY --from=build /root/.cache/pnpm /root/.cache/pnpm

@@ -1,11 +1,11 @@
 import assert from 'node:assert/strict'
 import { randomBytes } from 'node:crypto'
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
 import { apply } from '../index.js'
-import { signIn, signInLinear, signInGrafana, signInGoogleWorkspace } from '../src/host/connectors.js'
+import { grafanaBase, signIn, signInLinear, signInGrafana, signInGoogleWorkspace } from '../src/host/connectors.js'
 import { fakeContext } from './fake-ctx.js'
 
 const fresh = () => `ghp_${randomBytes(16).toString('hex')}`
@@ -247,3 +247,42 @@ test('signInGoogleWorkspace parses OAuth credentials JSON and connects', async (
   assert.ok(mounts[0].config.env.GOOGLE_APPLICATION_CREDENTIALS)
 })
 
+test('a Grafana address without https refuses to send the token, except on this computer', async () => {
+  const ok = async () => answer(200, { name: 'Org' })
+  await assert.rejects(signInGrafana('glsa_test', { url: 'http://grafana.example.com', fetch: ok }), /must start with https:\/\//)
+  await assert.rejects(signInGrafana('glsa_test', { url: 'https://user:pw@grafana.example.com', fetch: ok }), /user name and password/)
+  await assert.rejects(signInGrafana('glsa_test', { url: 'grafana.example.com', fetch: ok }), /valid Grafana URL/)
+  assert.deepEqual(await signInGrafana('glsa_test', { url: 'http://localhost:3000/', fetch: ok }), { login: 'Org' })
+  assert.equal(grafanaBase(' https://iruz.grafana.net// '), 'https://iruz.grafana.net')
+})
+
+test('MCP servers run from npm are pinned to exact versions', async (t) => {
+  const realFetch = globalThis.fetch
+  t.after(() => { globalThis.fetch = realFetch })
+  globalThis.fetch = async () => answer(200, { data: { viewer: { name: 'AteneaTeam' } } })
+  const { ctx, home, mounts } = setup({ linear: { api: 'https://linear.test/graphql' } })
+  t.after(async () => { await ctx.dispose(); rmSync(home, { recursive: true, force: true, maxRetries: 5 }) })
+  await call(ctx, 'connector-connect', { id: 'linear', token: 'lin_api_valid_123' })
+  const pkg = mounts[0].config.args.find(arg => !arg.startsWith('-'))
+  assert.match(pkg, /^@?[\w.-]+(\/[\w.-]+)?@\d+\.\d+\.\d+$/)
+})
+
+test('Google Workspace keeps the credentials in secrets, not a path, and removes its file on disconnect', async (t) => {
+  const { ctx, home, mounts } = setup({ googleWorkspace: {} })
+  t.after(async () => { await ctx.dispose(); rmSync(home, { recursive: true, force: true, maxRetries: 5 }) })
+  const source = join(home, 'downloaded.json')
+  const creds = { installed: { client_id: '123.apps.googleusercontent.com', project_id: 'atenea-prod' } }
+  writeFileSync(source, JSON.stringify(creds))
+  await assert.rejects(signInGoogleWorkspace(join(home, 'state.lock')), /does not exist/)
+
+  const connected = await call(ctx, 'connector-connect', { id: 'google-workspace', token: source })
+  assert.equal(connected.ok, true, JSON.stringify(connected))
+  const managed = mounts[0].config.env.GOOGLE_APPLICATION_CREDENTIALS
+  assert.notEqual(managed, source)
+  assert.deepEqual(JSON.parse(readFileSync(managed, 'utf8')), creds)
+  if (process.platform !== 'win32') assert.equal(statSync(managed).mode & 0o777, 0o600)
+
+  const gone = await call(ctx, 'connector-disconnect', { id: 'google-workspace' })
+  assert.equal(gone.ok, true, JSON.stringify(gone))
+  assert.equal(existsSync(managed), false)
+})

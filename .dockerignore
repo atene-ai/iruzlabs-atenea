@@ -9,5 +9,6 @@ docs/images
 docker/data
 docker/workspace
 docker/.env
+docker/server.env
 .env
 docker-compose.override.yml

@@ -1,0 +1,72 @@
+# Atenea for Iruz Labs staff: dsh web in server mode behind the Atenea gateway, which
+# signs staff in with Cognito and asks SLA what they may do (gateway/README.md). Only the
+# gateway is published, on loopback, for the reverse proxy in front of it. From docker/:
+#   cp server.env.example server.env   # fill it in; never commit it
+#   docker compose -f compose.server.yml --env-file server.env up -d --build
+services:
+  atenea:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+      args:
+        NPM_REGISTRY: ${NPM_REGISTRY:-https://registry.npmjs.org/}
+        DSH_VERSION: ${DSH_VERSION:-0.2.0-rc.2}
+    image: atenea:local
+    environment:
+      ATENEA_SERVER_MODE: "1"
+      # The gateway reaches dsh as http://atenea:3080; dsh answers 403 on /api to any
+      # authority it does not trust.
+      DSH_TRUSTED_HOST: atenea
+      DSH_LAUNCH_URL_FILE: /run/atenea/dsh-launch-url
+      # The gateway signs staff in; ds-bot's own desktop sign-in cannot work on a server.
+      ATENEA_AUTH_REQUIRED: "0"
+      ATENEA_IDENTITY_SECRET: ${ATENEA_IDENTITY_SECRET:?set ATENEA_IDENTITY_SECRET}
+      # ds-bot's shared mode (docs/plans/2026-11-05-multiuser-agents.md): it trusts only the
+      # gateway's identity header and manages agent shares in SLA with the user's token.
+      ATENEA_MULTIUSER: "1"
+      SLA_URL: ${SLA_URL:?set SLA_URL}
+      DSH_TELEMETRY_DISABLED: "1"
+      PUID: ${PUID:-1000}
+      PGID: ${PGID:-1000}
+      # Model keys. Name more here (and DEEPSEEK_BASE_URL) when DATA_DIR/cordis.patch.yml
+      # or another endpoint needs them.
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
+      FOUNDRY_API_KEY: ${FOUNDRY_API_KEY:-}
+    volumes:
+      - ${DATA_DIR:-./data}:/data
+      - ${WORKSPACE_DIR:-./workspace}:/workspace
+      - launch:/run/atenea
+    restart: unless-stopped
+    stop_grace_period: 15s
+
+  gateway:
+    build:
+      context: ../gateway
+    image: atenea-gateway:local
+    # The same user as dsh inside the other container, so it can read the 0600 launch file.
+    user: "${PUID:-1000}:${PGID:-1000}"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    environment:
+      PUBLIC_URL: ${PUBLIC_URL:-https://ia.iruzlabs.com}
+      COGNITO_DOMAIN: ${COGNITO_DOMAIN:?set COGNITO_DOMAIN}
+      COGNITO_ISSUER: ${COGNITO_ISSUER:?set COGNITO_ISSUER}
+      COGNITO_CLIENT_ID: ${COGNITO_CLIENT_ID:?set COGNITO_CLIENT_ID}
+      COGNITO_CLIENT_SECRET: ${COGNITO_CLIENT_SECRET:-}
+      SLA_URL: ${SLA_URL:?set SLA_URL}
+      ATENEA_IDENTITY_SECRET: ${ATENEA_IDENTITY_SECRET:?set ATENEA_IDENTITY_SECRET}
+      DSH_UPSTREAM: http://atenea:3080
+      DSH_LAUNCH_URL_FILE: /run/atenea/dsh-launch-url
+      GATEWAY_PORT: "13081"
+    volumes:
+      - launch:/run/atenea:ro
+    ports:
+      - "127.0.0.1:${GATEWAY_PORT:-13081}:13081"
+    depends_on:
+      - atenea
+    restart: unless-stopped
+    stop_grace_period: 10s
+
+volumes:
+  launch:

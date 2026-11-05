@@ -4,8 +4,9 @@
 // loopback one. It loads hidden and shows once the team view is ready (start-window.mjs). Closing
 // the team window hides it; the tray brings it back and its Quit ends the app (shell.mjs). Only
 // what the start window and the tray need is imported up front; the rest loads once the start
-// window is up (docs/plans/2026-10-26-start-window.md §11).
-import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, nativeImage, nativeTheme, powerMonitor, screen, session, shell as electronShell, systemPreferences, Tray, WebContentsView } from 'electron'
+// window is up (docs/plans/2026-10-26-start-window.md §11). In server mode the window loads a team
+// that runs on a server instead, and no Host starts (docs/plans/2026-11-05-desktop-server-client.md).
+import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, nativeImage, nativeTheme, net, powerMonitor, screen, session, shell as electronShell, systemPreferences, Tray, WebContentsView } from 'electron'
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { readFile, rm } from 'node:fs/promises'
 import { release } from 'node:os'
@@ -17,6 +18,7 @@ import { ARTIFACT_PREFIX, configureIdentity, PRODUCT_NAME } from './legacy.mjs'
 import { hostPort } from './host-port.mjs'
 import { captureStdio, LogFile } from './logs.mjs'
 import { currentRootOf, driveOf, formatBytes, freeSpace, isEmptyTree, pickFrom, placeOf, rootOf } from './place.mjs'
+import { accessLinkOf, loggable, navigationOf, permissionAllowed, probe, resolveServer, RETRY_MS, sourceName } from './server.mjs'
 import { createShell, SHELL_TEXT } from './shell.mjs'
 import { readStartFrame, writeStartFrame } from './start-frame.mjs'
 import { explainOf, StartWindow } from './start-window.mjs'
@@ -63,6 +65,11 @@ configureIdentity(app)
 app.name = PRODUCT_NAME
 if (process.env.DS_BOT_SHELL_DATA) app.setPath('userData', process.env.DS_BOT_SHELL_DATA)
 const frameFile = join(app.getPath('userData'), 'start-frame.json')
+// Where the team runs: the app's own engine, or a server (server.mjs). Read once at the start; a
+// retry on the failure page reads it again.
+const readServer = () => resolveServer({ env: process.env, userData: app.getPath('userData'), appPath: app.getAppPath() })
+let server = readServer()
+const serverMode = () => server.mode !== 'local'
 
 // Loaded once the start window is up (loadModules).
 let BotBrowserGuests, partitionOf, BotViews, isBotId, importFromBrowser, listSources, applyCookies, CookieImports, parseCookieFile
@@ -120,6 +127,20 @@ const copyAbort = new AbortController()
 let browserGuests
 let botViews
 let cookieImports
+// Server mode. The window's IPC and the permission rules are bound once.
+let serverBound = false
+// The timer of the next question to a server that did not answer, and why the last one failed,
+// so that the log says it once and not every 5 s.
+let serverRetry
+let unanswered
+// The access link card while it is up.
+let linkCard
+// The sign-in page the server sent the window to, which the card can open again.
+let signInUrl
+// A pasted access link is loading: a 401 now means the server refused it.
+let linkLoading = false
+// The server's team view has called ready() once: a window built anew may load it straight away.
+let serverReached = false
 
 // The team window and the tray: closing the window hides it, the tray is the way back to it and
 // the tray's Quit is the one ordinary way out. Until the hand-off the start window is the one
@@ -142,13 +163,13 @@ const shell = createShell({
   busy: () => choosing !== undefined || copying !== undefined,
   // Before the first run has chosen its places there is no window to show, and before the
   // first load of the Host there is no address to load.
-  ready: () => places !== undefined && origin !== undefined && bootstrap !== undefined,
+  ready: () => (serverMode() ? serverReached : places !== undefined && origin !== undefined && bootstrap !== undefined),
   notice: { marker: () => join(app.getPath('userData'), 'tray-close-acknowledged'), show: (options) => dialog.showMessageBox(options) },
   // Without a tray the close asks whether the app should end.
   fallback: { show: (options) => dialog.showMessageBox(options) },
 })
 // The tray icon goes away with the app, and a late answer to the close notice hides nothing.
-app.once('will-quit', () => { shell.dispose(); botViews?.dispose(); updates?.stop() })
+app.once('will-quit', () => { shell.dispose(); botViews?.dispose(); updates?.stop(); clearTimeout(serverRetry) })
 
 // A packaged app started through an 8.3 short path or a junction restarts once on the
 // canonical path: the lock below and every path the Host sees then agree with the long
@@ -164,19 +185,23 @@ if (canonical !== undefined) {
   rawOutput = captureStdio(logs)
   app.once('will-quit', () => { logs.flush() })
   console.log(`DS Bot ${app.getVersion()} (${process.platform} ${process.arch}), Electron ${process.versions.electron}`)
+  logServer()
   startWindow = new StartWindow({
     electron: { BrowserWindow, ipcMain, screen, shell: electronShell, clipboard, nativeTheme, systemPreferences },
     page: join(here, 'start', 'start.html'), preload: join(here, 'preload.cjs'), icon: iconFile, mica, devTools: !app.isPackaged,
     // On Windows the locale is known only once the app is ready.
     lang: () => langOf(app.getLocale()), motion: readStartFrame(frameFile).motion,
     version: app.getVersion(), program: [dirname(process.execPath), process.resourcesPath, app.getAppPath()], log: logs, mainWindow: () => mainWindow,
-    onRetry: () => { retry().catch(fail) },
-    onReload: () => { mainWindow?.webContents.reload() },
+    onRetry: () => { (serverMode() ? retryServer() : retry()).catch(fail) },
+    onReload: () => { if (serverMode()) loadServer(server.url); else mainWindow?.webContents.reload() },
     // Closing the start window before the hand-off quits: there is no team window yet to stay in
     // the tray with.
     onClose: () => { app.quit() },
     onPick: () => { changePlace().catch(fail) },
     onAnswer: (value) => { placeAnswer(value).catch(fail) },
+    onReconnect: () => { connectServer().catch(fail) },
+    onLink: (value) => { openLink(value) },
+    onSignIn: () => { if (signInUrl !== undefined) openOutside(signInUrl) },
   })
   // A second launch shows the window that is showing: the start window until the hand-off
   // (also after a failed start), then the team window, built anew when it is gone.
@@ -227,8 +252,170 @@ async function start() {
   nativeTheme.themeSource = readStartFrame(frameFile).themeSource
   // A packaged app has the icon in its bundle; Electron's own run shows Electron's.
   if (process.platform === 'darwin' && !app.isPackaged) app.dock?.setIcon(iconFile)
+  if (serverMode()) { await startServer(); return }
   await prepare()
   run()
+}
+
+function logServer() {
+  const from = sourceName(server.source)
+  if (server.mode === 'server') console.log(`Atenea: server mode: the team runs on ${server.origin} (from ${from}); no local engine starts`)
+  else if (server.mode === 'invalid') console.error(`Atenea: the server address from ${from} cannot be used (${server.reason}): only https:// addresses with nothing after the host are accepted; the app does not start`)
+  else console.log(`Atenea: local mode: the app starts its own engine (${from})`)
+}
+
+// Server mode: no data folder, no import, no Office runtime and no engine. The start window shows
+// while the app asks the server, the VPN card while the server does not answer, and the hidden
+// team window loads the server's page.
+async function startServer() {
+  startWindow.open('server')
+  if (tx === undefined) await loadServerModules()
+  startAppUpdates()
+  await openServer()
+}
+
+async function loadServerModules() {
+  const [downloads, firstRun, updatesModule, updater] = await Promise.all([
+    import('./downloads.mjs'), import('./first-run.mjs'), import('./updates.mjs'), import('electron-updater'),
+  ])
+  ;({ downloadSaver } = downloads)
+  ;({ tx } = firstRun)
+  ;({ watchReleases, watchUpdates } = updatesModule)
+  electronUpdater = updater.default
+}
+
+// A server address that is set but cannot be used stops the start: running the local engine
+// instead would put the team where nobody chose to have it.
+async function openServer() {
+  if (server.mode === 'invalid') {
+    await fail(new Error(`The Atenea server address from ${sourceName(server.source)} cannot be used (${server.reason})`))
+    return
+  }
+  // The window was built for another origin, which its preload and its rules are tied to.
+  if (origin !== undefined && origin !== server.origin) { app.relaunch(); app.quit(); return }
+  origin = server.origin
+  if (!serverBound) {
+    serverBound = true
+    guardPermissions()
+    handleWindowIpc()
+  }
+  if (mainCreated === undefined || (await mainCreated, mainWindow === undefined)) mainCreated = startWindow.painted.then(createWindow)
+  await connectServer()
+}
+
+// 〔重试〕 on the failure page reads the setting again, so that a corrected server.json takes
+// effect without a restart; one that now asks for the local engine needs a fresh start.
+async function retryServer() {
+  failed = false
+  server = readServer()
+  logServer()
+  if (server.mode === 'local') { app.relaunch(); app.quit(); return }
+  startWindow.open('server')
+  await openServer()
+}
+
+// The server is asked at the start, on 〔重试〕 and every 5 s while the VPN card is up; the card
+// stays up between these questions. Once the server answers, the hidden team window loads it.
+async function connectServer({ again = false } = {}) {
+  const mine = (attempt += 1)
+  clearTimeout(serverRetry)
+  if (!again) { linkCard = undefined; startWindow.connecting() }
+  const answer = await probe(server.url, { request: options => net.request(options) })
+  if (mine !== attempt || stopping || failed) return
+  if (!answer.reachable) {
+    if (answer.reason !== unanswered) console.log(`Atenea: ${server.origin} does not answer (${answer.reason}); the VPN may be off. Asking again every ${String(RETRY_MS / 1000)} s`)
+    unanswered = answer.reason
+    startWindow.card({ kind: 'vpn', host: new URL(server.origin).host, problem: answer.reason === 'tls' ? 'tls' : 'away' })
+    serverRetry = setTimeout(() => { connectServer({ again: true }).catch(fail) }, RETRY_MS)
+    return
+  }
+  unanswered = undefined
+  console.log(`Atenea: ${server.origin} answered (HTTP ${String(answer.status)})`)
+  if (again) startWindow.connecting()
+  startWindow.done('data')
+  startWindow.done('engine')
+  await mainCreated
+  if (mine !== attempt || mainWindow === undefined) return
+  loadServer(server.url)
+}
+
+// The hidden team window loads the server's page, or a pasted access link once. A 401 or a
+// sign-in on the way puts the access link card up instead (watchServer).
+function loadServer(url) {
+  const win = mainWindow
+  if (win === undefined || win.isDestroyed()) return
+  startWindow.teamLoading()
+  // The error names the address, and a pasted link's address holds its token.
+  win.loadURL(url).catch((error) => { if (linkCard === undefined) console.log(`Atenea: the server's page did not load (${String(error?.code ?? 'no code')})`) })
+}
+
+// The server does not know this window yet (DSH Web answers 401 until an access link has set its
+// cookie), or it sent the window to the sign-in. After the hand-off the start window comes back
+// for the card, over the hidden team window.
+function needLink() {
+  const problem = linkLoading ? 'spent' : undefined
+  linkLoading = false
+  if (startWindow.owner() === undefined) {
+    startWindow.reopen('server')
+    startWindow.done('data')
+    startWindow.done('engine')
+  }
+  if (linkCard === undefined) console.log(`Atenea: ${server.origin} asks who this is; the access link card is up`)
+  linkCard = { kind: 'link', host: new URL(server.origin).host, signIn: signInUrl !== undefined, ...(problem === undefined ? {} : { problem }) }
+  startWindow.card(linkCard)
+}
+
+// The link pasted on the card loads once in the hidden team window when it is an access link of
+// this server. It is neither logged nor kept.
+function openLink(value) {
+  if (linkCard === undefined || mainWindow === undefined) return
+  const link = accessLinkOf(value, origin)
+  if (!link.ok) {
+    console.log(`Atenea: the pasted text is not an access link to ${origin} (${link.reason})`)
+    linkCard = { ...linkCard, problem: 'wrong' }
+    startWindow.card(linkCard)
+    return
+  }
+  console.log('Atenea: opening the pasted access link')
+  linkCard = undefined
+  linkLoading = true
+  startWindow.connecting()
+  loadServer(link.url)
+}
+
+// The server's page may ask the window only for what it needs, and no other origin anything.
+function guardPermissions() {
+  const own = session.defaultSession
+  own.setPermissionRequestHandler((_contents, permission, callback, details) => { callback(permissionAllowed(permission, details?.requestingUrl ?? '', origin)) })
+  own.setPermissionCheckHandler((_contents, permission, requestingOrigin) => permissionAllowed(permission, requestingOrigin, origin))
+}
+
+// Where the server's window goes: its own pages stay, sign-ins and other sites open in the system
+// browser. A redirect to the sign-in leaves the window without a page: the access link card
+// takes over.
+function watchServer(contents) {
+  contents.on('will-navigate', (event, url) => {
+    const where = navigationOf(event.url ?? url, origin)
+    if (where === 'inside') return
+    event.preventDefault()
+    if (where !== 'blocked') openOutside(event.url ?? url)
+  })
+  // Also for a frame inside the page, whose redirects are the frame's business.
+  contents.on('will-redirect', (event, url, _inPlace, isMainFrame) => {
+    if ((event.isMainFrame ?? isMainFrame) === false) return
+    const to = event.url ?? url
+    const where = navigationOf(to, origin)
+    if (where === 'inside') return
+    event.preventDefault()
+    if (where === 'blocked') return
+    console.log(`Atenea: the server sent the window to ${loggable(to)}, which opens in the system browser`)
+    openOutside(to)
+    if (where === 'auth') { signInUrl = to; needLink() }
+  })
+  contents.on('did-navigate', (_event, url, status) => {
+    if (status === 401 && navigationOf(url, origin) === 'inside') needLink()
+    else linkLoading = false
+  })
 }
 
 // What the boot needs; a retry after a failure here does what is still missing.
@@ -514,12 +701,7 @@ async function startEngine(mine) {
   }
   // Not during the import, which a restart would cut short; before the Host, so that an
   // update can still come when this version's Host does not start.
-  if (!updatesStarted) {
-    updatesStarted = true
-    updates = startUpdates()
-    updates?.subscribe((state) => { mainWindow?.webContents.send(IPC.appUpdateChanged, state) })
-
-  }
+  startAppUpdates()
   // Before the Host, which reads the Sessions.
   await restoreSessions(places.dataDir).then(({ copied, newer }) => {
     if (copied.length > 0) console.log(`DS Bot: copied ${copied.join(', ')}, which the import left out`)
@@ -541,20 +723,9 @@ async function startEngine(mine) {
 }
 
 function handleIpc() {
-
+  handleWindowIpc()
   // A throwaway run (DS_BOT_HOME) keeps its folders where it was told.
   const fixed = Boolean(process.env.DS_BOT_HOME)
-  // The team view has mounted (ds-bot calls dsBotApp.ready()): the start window hands over.
-  ipcMain.on(IPC.ready, (event) => { if (fromWindow(event)) startWindow.ready() })
-  // The start window takes the app's theme and the Bot animation tier at the next start, before
-  // the team view has loaded; Mica and the caption buttons follow the theme at once.
-  ipcMain.on(IPC.nativeTheme, (event, source) => {
-    const value = nativeThemeSource(source)
-    if (!fromWindow(event) || value === undefined) return
-    nativeTheme.themeSource = value
-    writeStartFrame(frameFile, { themeSource: value })
-  })
-  ipcMain.on(IPC.motion, (event, tier) => { if (fromWindow(event)) writeStartFrame(frameFile, { motion: tier }) })
   ipcMain.handle(IPC.dataLocation, (event) => {
     assertWindow(event)
     return { path: places.dataDir, fixed }
@@ -641,6 +812,32 @@ function handleIpc() {
     assertWindow(event)
     if (typeof id === 'string') cookieImports.drop(id)
   })
+  // The plugin keeps the team workspace; the app remembers it for its own checks.
+  ipcMain.on(IPC.teamWorkspace, (event, path) => {
+    if (fixed || !fromWindow(event) || typeof path !== 'string' || !isAbsolute(path)) return
+    places = { ...places, workspace: path }
+    saveLocations(places)
+  })
+}
+
+// What the team window asks of the app in both modes: the hand-off, its look, the app's own
+// updater and, on Windows, the caption buttons' colors.
+function handleWindowIpc() {
+  // The team view has mounted (ds-bot calls dsBotApp.ready()): the start window hands over.
+  ipcMain.on(IPC.ready, (event) => {
+    if (!fromWindow(event)) return
+    if (serverMode()) serverReached = true
+    startWindow.ready()
+  })
+  // The start window takes the app's theme and the Bot animation tier at the next start, before
+  // the team view has loaded; Mica and the caption buttons follow the theme at once.
+  ipcMain.on(IPC.nativeTheme, (event, source) => {
+    const value = nativeThemeSource(source)
+    if (!fromWindow(event) || value === undefined) return
+    nativeTheme.themeSource = value
+    writeStartFrame(frameFile, { themeSource: value })
+  })
+  ipcMain.on(IPC.motion, (event, tier) => { if (fromWindow(event)) writeStartFrame(frameFile, { motion: tier }) })
   // The app's own update state, for the About row. `updates` exists once the engine's first
   // start created it; before that (and in runs without an updater) the state is null.
   ipcMain.handle(IPC.appUpdateState, (event) => {
@@ -661,12 +858,6 @@ function handleIpc() {
     if (state?.phase === 'available' && typeof state.page === 'string' && state.page.startsWith('https://')) {
       void electronShell.openExternal(state.page)
     }
-  })
-  // The plugin keeps the team workspace; the app remembers it for its own checks.
-  ipcMain.on(IPC.teamWorkspace, (event, path) => {
-    if (fixed || !fromWindow(event) || typeof path !== 'string' || !isAbsolute(path)) return
-    places = { ...places, workspace: path }
-    saveLocations(places)
   })
   if (process.platform === 'win32') {
     // Windows ignores the alpha of the caption buttons' color, so they take the opaque color
@@ -822,6 +1013,13 @@ async function moveData(workspace) {
   return true
 }
 
+function startAppUpdates() {
+  if (updatesStarted) return
+  updatesStarted = true
+  updates = startUpdates()
+  updates?.subscribe((state) => { mainWindow?.webContents.send(IPC.appUpdateChanged, state) })
+}
+
 // Windows and a Linux AppImage update themselves; macOS and a Linux deb ask to download the new
 // version. Throwaway runs check only a given feed and never ask.
 function startUpdates() {
@@ -913,8 +1111,9 @@ function createWindow() {
       ...(mica ? { backgroundMaterial: 'mica' } : {}),
     } : {}),
     webPreferences: {
-      preload: join(here, 'preload.cjs'), contextIsolation: true, sandbox: true, webviewTag: true,
-      additionalArguments: [`--ds-bot-origin=${origin}`, ...(win32 ? [`--ds-bot-caption=${String(CAPTION_HEIGHT)}`, ...(mica ? ['--ds-bot-mica'] : [])] : [])],
+      // The Bot browsers' webviews need the app's own engine; a server's page gets none.
+      preload: join(here, 'preload.cjs'), contextIsolation: true, sandbox: true, webviewTag: !serverMode(),
+      additionalArguments: [`--ds-bot-origin=${origin}`, ...(serverMode() ? ['--ds-bot-server'] : []), ...(win32 ? [`--ds-bot-caption=${String(CAPTION_HEIGHT)}`, ...(mica ? ['--ds-bot-mica'] : [])] : [])],
     },
   })
   mainWindow = win
@@ -926,13 +1125,13 @@ function createWindow() {
     if (mainWindow !== win) return
     mainWindow = undefined
     // The Bot browsers' tabs belonged to this window; they wait for the next one.
-    botViews.release()
+    botViews?.release()
   })
   // The window hides instead of closing; the shell decides when it really goes.
   shell.watch(win)
-  browserGuests.bind(win)
+  browserGuests?.bind(win)
   // The tabs that outlived the last window join this one.
-  botViews.attach(win)
+  botViews?.attach(win)
   const contents = win.webContents
   // The session is the same for every window of the app, so the handler is bound once.
   if (!downloadsBound) {
@@ -969,11 +1168,15 @@ function createWindow() {
     child.webContents.on('will-navigate', away)
     child.webContents.on('will-redirect', away)
   })
-  contents.on('will-navigate', (event, url) => {
-    if (url.startsWith(`${origin}/`)) return
-    event.preventDefault()
-    openOutside(url)
-  })
+  if (serverMode()) {
+    watchServer(contents)
+  } else {
+    contents.on('will-navigate', (event, url) => {
+      if (url.startsWith(`${origin}/`)) return
+      event.preventDefault()
+      openOutside(url)
+    })
+  }
   if (!app.isPackaged) {
     contents.on('before-input-event', (_event, input) => {
       if (input.type === 'keyDown' && (input.key === 'F12' || (input.control && input.shift && input.key.toLowerCase() === 'i'))) contents.toggleDevTools()
@@ -989,7 +1192,8 @@ function createWindow() {
 // The window is gone for good: a new one takes its place and talks to the Host that runs.
 function rebuildWindow() {
   const win = createWindow()
-  void connectHost(win).catch((error) => { console.error(error) })
+  if (serverMode()) loadServer(server.url)
+  else void connectHost(win).catch((error) => { console.error(error) })
   return win
 }
 
@@ -1098,7 +1302,8 @@ async function fail(error) {
   if (failed || stopping) return
   failed = true
   const mine = attempt
-  startWindow.fail(error, startKind())
+  clearTimeout(serverRetry)
+  startWindow.fail(error, serverMode() ? 'server' : startKind())
   const found = await Promise.race([updates?.latest() ?? null, sleep(UPDATE_CHECK_WAIT_MS).then(() => null)])
   if (!found || mine !== attempt) return
   await dialog.showMessageBox(owner(), { type: 'info', title: PRODUCT_NAME, message: tx(found.page ? 'dialog.update.onFailurePage' : 'dialog.update.onFailure', { version: found.version }) })

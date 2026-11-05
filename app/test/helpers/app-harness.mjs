@@ -20,10 +20,12 @@ export const waitFor = async (check, what, timeout = 10_000) => {
 /**
  * Start the app on throwaway folders: the places are chosen already and the one-time notice
  * is answered, so that the app asks nothing. The Host answers when the test lets it.
- * @param {{ packaged?: boolean, firstRun?: boolean }} options whether the app is a packaged
- *   one, with an updater; a first run keeps its places unchosen, so that it asks
+ * @param {{ packaged?: boolean, firstRun?: boolean, server?: string }} options whether the app is
+ *   a packaged one, with an updater; a first run keeps its places unchosen, so that it asks;
+ *   `server` is ATENEA_SERVER_URL, `local` (the app's own engine) unless a test asks for a server
  */
-export const startApp = async ({ packaged = true, firstRun = false } = {}) => {
+export const startApp = async ({ packaged = true, firstRun = false, server = 'local' } = {}) => {
+  process.env.ATENEA_SERVER_URL = server
   const home = mkdtempSync(join(tmpdir(), 'ds-bot-main-home-'))
   const workspace = join(home, 'workspace')
   mkdirSync(workspace, { recursive: true })

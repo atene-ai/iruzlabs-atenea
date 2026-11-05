@@ -1,6 +1,7 @@
 // Gives the page that the app's Host serves the app's own bridge, and the app's start page its
-// own, smaller one; each window's arguments name the one page that gets it. On Windows it also
-// marks the Host's page for the frameless window the way DSH Desktop's preload does
+// own, smaller one; each window's arguments name the one page that gets it. In server mode
+// (--ds-bot-server) the server's page gets only what does not need the app's own engine. On
+// Windows it also marks the Host's page for the frameless window the way DSH Desktop's preload does
 // (apps/desktop/src/preload-windows.ts, preload-platform.ts and preload-theme.ts; see NOTICE),
 // but without data-platform: that puts DSH's shortcuts on native menu input, which this
 // window does not have.
@@ -12,24 +13,7 @@ const host = argument('ds-bot-origin')
 if (startPage !== undefined) {
   if (location.href.split(/[?#]/u)[0] === startPage) contextBridge.exposeInMainWorld('dsBotStart', startBridge())
 } else if (host !== undefined && location.origin === host) {
-  let ready = false
-  contextBridge.exposeInMainWorld('dsBotApp', {
-    // The team view has mounted: the start window hands over to this one.
-    ready: () => {
-      if (ready) return
-      ready = true
-      ipcRenderer.send('ds-bot:ready')
-    },
-    // DS Bot's settings show and move the app's data location through this.
-    dataLocation: () => ipcRenderer.invoke('ds-bot:data-location'),
-    moveData: (workspace) => ipcRenderer.invoke('ds-bot:move-data', typeof workspace === 'string' ? workspace : undefined),
-    teamWorkspaceChanged: (path) => { ipcRenderer.send('ds-bot:team-workspace', String(path)) },
-    // The Bot browsers, in the shape of DSH Desktop's browser bridge so that ds-bot drives both
-    // alike; `forget` clears a key's storage, which here outlives the app.
-    browser: browserBridge(),
-    // The app's own updater, for the About row's state and buttons.
-    updates: updatesBridge(),
-  })
+  contextBridge.exposeInMainWorld('dsBotApp', process.argv.includes('--ds-bot-server') ? serverBridge() : appBridge())
   // A preload runs before the document root exists.
   const loaded = (run) => {
     if (document.readyState === 'loading') window.addEventListener('DOMContentLoaded', run, { once: true })
@@ -45,6 +29,44 @@ if (startPage !== undefined) {
       else delete root.dataset.fullscreen
     })
     loaded(() => { frameless(caption.slice('--ds-bot-caption='.length), process.argv.includes('--ds-bot-mica')) })
+  }
+}
+
+// The team view has mounted: the start window hands over to this one.
+function readyOnce() {
+  let ready = false
+  return () => {
+    if (ready) return
+    ready = true
+    ipcRenderer.send('ds-bot:ready')
+  }
+}
+
+function appBridge() {
+  return {
+    ready: readyOnce(),
+    // DS Bot's settings show and move the app's data location through this.
+    dataLocation: () => ipcRenderer.invoke('ds-bot:data-location'),
+    moveData: (workspace) => ipcRenderer.invoke('ds-bot:move-data', typeof workspace === 'string' ? workspace : undefined),
+    teamWorkspaceChanged: (path) => { ipcRenderer.send('ds-bot:team-workspace', String(path)) },
+    // The Bot browsers, in the shape of DSH Desktop's browser bridge so that ds-bot drives both
+    // alike; `forget` clears a key's storage, which here outlives the app.
+    browser: browserBridge(),
+    // The app's own updater, for the About row's state and buttons.
+    updates: updatesBridge(),
+  }
+}
+
+// The team, its data and its workspace are the server's, and the Bot browsers need the app's own
+// engine. DS Bot's settings hide the data location when it is null, and without `browser` the
+// plugin runs as it does in DSH Web. Nothing here reaches the engine's IPC.
+function serverBridge() {
+  return {
+    ready: readyOnce(),
+    dataLocation: () => Promise.resolve(null),
+    moveData: () => Promise.resolve(false),
+    teamWorkspaceChanged: () => {},
+    updates: updatesBridge(),
   }
 }
 

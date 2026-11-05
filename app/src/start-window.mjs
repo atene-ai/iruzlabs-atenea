@@ -16,7 +16,8 @@ export const SHORT_START_SIZE = { width: 720, height: 500 }
 const SHORT_WORK_AREA = 588
 export const MAIN_SIZE = { width: 1320, height: 860 }
 export const PHASES = ['data', 'engine', 'team']
-export const START_KINDS = ['first', 'later', 'moving']
+// 'server': the team runs on a server (docs/plans/2026-11-05-desktop-server-client.md).
+export const START_KINDS = ['first', 'later', 'moving', 'server']
 export const WATCHDOG_MS = 180_000
 export const TEAM_VIEW_MS = 20_000
 // handoffShow + 160 ms: the growth, 300 ms in steps of about 14 ms; the start window goes
@@ -42,6 +43,11 @@ const ACT_VIEWS = {
   // (「会放在…」, a place that cannot be used).
   pick: ['boot', 'card', 'watchdog'],
   answer: ['card'],
+  // Server mode: 〔重试〕 on the VPN card, the access link pasted on the link card, and the
+  // sign-in that opens in the system browser again.
+  reconnect: ['card'],
+  link: ['card'],
+  signIn: ['card'],
   openLogs: null,
   copyDetails: null,
 }
@@ -142,9 +148,11 @@ export function growthSteps(from, to, { duration, step } = GROWTH) {
 // start and a celebrating hand-off take up to about 1.2 s, plus up to 600 ms of queued swimming.
 export const fallbackMs = ({ start, celebrate }) => (start === 'first' || celebrate ? 2500 : 800)
 
-// The five reasons of the failure page (windows-onboarding §3), most specific first: a Host
-// that stopped says so and carries its own error output, which names the cause.
+// The reasons of the failure page (windows-onboarding §3), most specific first: a server address
+// that cannot be used (server mode), and a Host that stopped says so and carries its own error
+// output, which names the cause.
 const REASONS = [
+  ['server', /Atenea server address/u],
   ['permission', /\b(?:EACCES|EPERM)\b|permission denied|operation not permitted|access is denied/iu],
   ['space', /\b(?:ENOSPC|EDQUOT)\b|no space left|not enough space|disk (?:is )?full/iu],
   ['files', /\b(?:MODULE_NOT_FOUND|ERR_MODULE_NOT_FOUND)\b|cannot find (?:module|package)|could not load its own bundles|not a valid Win32 application|0xC0000135|3221225781/iu],
@@ -161,7 +169,7 @@ function missingOwnFile(error, text, program) {
 
 /**
  * @param {{ program?: string[] }} where `program`: the folders of the app's own files
- * @returns {'permission' | 'space' | 'files' | 'engine' | 'other'}
+ * @returns {'server' | 'permission' | 'space' | 'files' | 'engine' | 'other'}
  */
 export function failureReason(error, { program = [] } = {}) {
   const code = typeof error?.code === 'string' ? error.code : ''
@@ -224,6 +232,10 @@ export const detailsText = ({ version, platform, arch, reason, lines }) => [`DS 
 const note = message => { console.log(`DS Bot: start window: ${message}`) }
 // The page sends a button's detail as { value }; anything else counts as none.
 const valueOf = payload => (payload !== null && typeof payload === 'object' && typeof payload.value === 'string' ? payload.value.slice(0, 40) : undefined)
+// A pasted access link is longer; one longer than this is no access link, and the main process
+// says so.
+const LINK_CHARS = 4097
+const linkOf = payload => (payload !== null && typeof payload === 'object' && typeof payload.value === 'string' ? payload.value.slice(0, LINK_CHARS) : '')
 
 export class StartWindow {
   #o
@@ -261,10 +273,12 @@ export class StartWindow {
    *   mainWindow: () => any,
    *   onRetry: () => void, onReload: () => void, onClose: () => void,
    *   onPick?: (value?: string) => void, onAnswer?: (value?: string) => void,
+   *   onReconnect?: () => void, onLink?: (value: string) => void, onSignIn?: () => void,
    * }} options `lang` is asked at each open; `program` names the folders of the app's own files;
    *   `onClose` runs when the user closes the start window before the hand-off; `onPick` when
    *   the page asks for the folder picker ('changePlace' from its place line, nothing from a
-   *   card's 〔重新选〕), `onAnswer` with a card's answer ('use' for 〔继续〕 on 「会放在…」).
+   *   card's 〔重新选〕), `onAnswer` with a card's answer ('use' for 〔继续〕 on 「会放在…」);
+   *   in server mode `onReconnect`, `onLink` with the pasted link and `onSignIn` from their cards.
    */
   constructor(options) {
     this.#o = options
@@ -353,6 +367,17 @@ export class StartWindow {
     void win.loadURL(this.#url).catch((error) => { note(`the start page did not load: ${error instanceof Error ? error.message : String(error)}`) })
   }
 
+  /**
+   * The start window again over the hidden team window, also when the one of the hand-off has not
+   * gone yet: server mode's access link card after the hand-off.
+   */
+  reopen(kind) {
+    if (this.#revealed) this.#destroy()
+    const main = this.#o.mainWindow()
+    if (main !== undefined && !main.isDestroyed()) main.hide()
+    this.open(kind)
+  }
+
   /** The window that dialogs belong to, while it is the one showing. */
   owner() { return this.#open() && !this.#revealed ? this.#window : undefined }
 
@@ -387,8 +412,9 @@ export class StartWindow {
 
   /**
    * A card on the sheet while the start boots (the clock stands still), or none: back to the
-   * boot. Only the cards of a place: 「会放在…」 and a place that cannot be used.
-   * @param {{ kind: 'picked' | 'rejected', path: string, reason?: string } | undefined} card
+   * boot. The cards of a place (「会放在…」 and a place that cannot be used) and, in server mode,
+   * the VPN card and the access link card.
+   * @param {{ kind: 'picked' | 'rejected' | 'vpn' | 'link', path?: string, reason?: string, host?: string, problem?: string, signIn?: boolean } | undefined} card
    */
   card(card) {
     if (!this.#open() || !['boot', 'card', 'watchdog'].includes(this.#state.view)) return
@@ -412,6 +438,17 @@ export class StartWindow {
     this.#phaseAt = Date.now()
     this.#clear('teamView')
     this.#update({ view: 'boot', done: [], card: undefined, failure: undefined, celebrate: true, clock: { base: 0, from: Date.now(), running: true } })
+  }
+
+  /**
+   * Server mode: back to the boot while the app asks the server or loads its page, with no
+   * verdict of the 20 s check left over from before the card.
+   */
+  connecting() {
+    if (!this.#open()) return
+    this.#holdsOff()
+    this.#clear('teamView')
+    if (['boot', 'card', 'watchdog', 'viewFailed'].includes(this.#state.view)) this.#update({ view: 'boot', card: undefined, failure: undefined })
   }
 
   /**
@@ -616,6 +653,9 @@ export class StartWindow {
     else if (name === 'copyDetails') this.#copyDetails()
     else if (name === 'pick') this.#o.onPick?.(valueOf(payload))
     else if (name === 'answer') this.#o.onAnswer?.(valueOf(payload))
+    else if (name === 'reconnect') this.#o.onReconnect?.()
+    else if (name === 'link') this.#o.onLink?.(linkOf(payload))
+    else if (name === 'signIn') this.#o.onSignIn?.()
     return true
   }
 

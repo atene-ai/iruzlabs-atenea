@@ -40,6 +40,12 @@ export const state = {
   cookies: [],
   paths: {},
   dock: { setIcon: () => {} },
+  // Server mode: what the network answers (net.request) — { status } or { error } — and the
+  // requests it got; the HTTP status of a page the window loads, which did-navigate reports.
+  netAnswer: undefined,
+  netRequests: [],
+  pageStatus: undefined,
+  permissions: {},
 }
 
 export class FakeWindow extends EventEmitter {
@@ -91,6 +97,8 @@ export class FakeWindow extends EventEmitter {
     this.url = url
     this.loaded.push(url)
     if (state.rejectLoads || this.rejectLoads) throw new Error(`the page ${url} did not load`)
+    const status = state.pageStatus?.(url)
+    if (status !== undefined) this.webContents.emit('did-navigate', {}, url, status)
     // The Host trades the token of the launch URL for a cookie of the browser's session.
     try {
       const parsed = new URL(url)
@@ -114,7 +122,9 @@ class FakeWebContents extends EventEmitter {
     this.isDestroyed = () => this.win.destroyed
     this.getURL = () => this.win.url
     this.getTitle = () => PRODUCT_NAME
-    this.send = () => {}
+    // The last message on each channel: the start window's state, for one.
+    this.messages = new Map()
+    this.send = (channel, value) => { this.messages.set(channel, value) }
     this.setWindowOpenHandler = () => {}
     this.insertCSS = async () => {}
     this.toggleDevTools = () => {}
@@ -225,8 +235,31 @@ const cookieJar = {
 }
 
 export const session = {
-  defaultSession: Object.assign(new EventEmitter(), { cookies: cookieJar }),
+  defaultSession: Object.assign(new EventEmitter(), {
+    cookies: cookieJar,
+    setPermissionRequestHandler: (handler) => { state.permissions.request = handler },
+    setPermissionCheckHandler: (handler) => { state.permissions.check = handler },
+  }),
   fromPartition: () => Object.assign(new EventEmitter(), { cookies: cookieJar }),
+}
+
+// The network of the main process: each request answers what state.netAnswer says.
+export const net = {
+  request: (options) => {
+    state.netRequests.push(options)
+    const request = new EventEmitter()
+    request.end = () => {
+      setImmediate(() => {
+        if (request.aborted) return
+        const answer = state.netAnswer?.(options) ?? { status: 200 }
+        if (answer.error !== undefined) request.emit('error', new Error(answer.error))
+        else if (answer.status >= 300 && answer.status < 400) request.emit('redirect', answer.status)
+        else request.emit('response', { statusCode: answer.status })
+      })
+    }
+    request.abort = () => { request.aborted = true }
+    return request
+  },
 }
 
 export const ipcMain = {

@@ -61,7 +61,8 @@ try {
   mkdirSync(work, { recursive: true })
   child = spawn(electron, [join(here, '..', 'test', 'electron', 'lifecycle-main.mjs')], {
     cwd: join(here, '..'),
-    env: { ...process.env, DS_BOT_SHELL_DATA: work },
+    // The window and tray run on a fake Host: never on the package's default server.
+    env: { ...process.env, DS_BOT_SHELL_DATA: work, ATENEA_SERVER_URL: 'local' },
     stdio: ['ignore', 'pipe', 'pipe'],
   })
   child.stdout.setEncoding('utf8')

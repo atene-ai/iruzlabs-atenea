@@ -16,6 +16,8 @@ jobs:
   test:
     name: ${{ matrix.os }} · Node ${{ matrix.node }} · DSH ${{ matrix.dsh }}
     runs-on: ${{ matrix.os }}
+    # The job takes about two minutes; a hung test once held it for half an hour.
+    timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:

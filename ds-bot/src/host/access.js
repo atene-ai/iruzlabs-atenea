@@ -161,6 +161,8 @@ export const ENDPOINT_RULES = {
   'claim-bot': { kind: 'admin', target: bot('id'), audit: true },
   author: { kind: 'write', target: session('sessionId'), audit: false },
   authors: { kind: 'any' },
+  // The gateway's question before a DSH Session call; it answers only about the caller.
+  'session-access': { kind: 'any' },
   // Each person's own CRM link and accounts (crm.js). Linking completes on the callback
   // route, which writes its own audit line.
   'crm-view': { kind: 'any' },

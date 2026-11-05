@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { createHash, createHmac } from 'node:crypto'
 import { test } from 'node:test'
 import { upstreamHeaders } from '../src/proxy.js'
-import { closed, IDENTITY_SECRET, nextData, openFeed, openWebSocket, PUBLIC_URL, signIn, startEnv, WS_GUID } from './helpers.js'
+import { clientFrame, closed, IDENTITY_SECRET, nextData, openFeed, openWebSocket, PUBLIC_URL, readFrames, signIn, startEnv, WS_GUID } from './helpers.js'
 
 const lastRequest = env => env.dsh.requests[env.dsh.requests.length - 1]
 const decode = token => JSON.parse(Buffer.from(token.split('.')[1], 'base64url').toString())
@@ -101,7 +101,8 @@ test('blocked routes never reach dsh', async (t) => {
   assert.equal((await env.request({ path: '/api/file?path=/data/.credentials.yaml', headers })).status, 403)
   assert.equal((await env.request({ path: '/connect?token=x', headers })).status, 404)
   assert.equal(env.dsh.requests.length, 0)
-  assert.equal((await env.request({ method: 'POST', path: '/api/session/list', headers, body: '{}' })).status, 200)
+  const list = JSON.stringify({ type: 'client-request', rpcId: 'r1', method: 'session/list', payload: { args: { _request: {} } } })
+  assert.equal((await env.request({ method: 'POST', path: '/api/session/list', headers, body: list })).status, 200)
 })
 
 test('dsh refusing the gateway\'s cookie makes it trade the new launch token and retry', async (t) => {
@@ -137,7 +138,7 @@ test('the Remote WebSocket is proxied as the gateway\'s session', async (t) => {
   const env = await startEnv()
   t.after(() => env.close())
   const { cookie } = await signIn(env)
-  const ws = await openWebSocket(env.port, { headers: { Cookie: `${cookie}; dsh-auth-test=planted`, Origin: PUBLIC_URL, 'X-Atenea-Identity': 'forged' } })
+  const ws = await openWebSocket(env.port, { headers: { Cookie: `${cookie}; dsh-auth-test=planted`, Origin: PUBLIC_URL, 'X-Atenea-Identity': 'forged', 'Sec-WebSocket-Extensions': 'permessage-deflate; client_max_window_bits' } })
   t.after(() => ws.socket.destroy())
   assert.equal(ws.status, 101)
   const accept = createHash('sha1').update(`${ws.key}${WS_GUID}`).digest('base64')
@@ -149,8 +150,11 @@ test('the Remote WebSocket is proxied as the gateway\'s session', async (t) => {
   assert.equal(seen.headers.origin, env.dsh.origin)
   assert.equal(seen.headers.cookie, `dsh-auth-test=${env.dsh.cookie}`)
   assert.equal(decode(seen.headers['x-atenea-identity']).sub, 'staff-1')
-  ws.socket.write('frame-bytes')
-  assert.equal((await nextData(ws.socket)).toString(), 'frame-bytes')
+  assert.equal(seen.headers['sec-websocket-extensions'], undefined, 'no compression to read through')
+  // The fake echoes what dsh received: the browser's message, masked again by the gateway.
+  ws.socket.write(clientFrame('{"type":"cancel","streamId":"s1"}'))
+  const [echo] = readFrames(await nextData(ws.socket))
+  assert.deepEqual([echo.opcode, echo.masked, echo.text], [1, true, '{"type":"cancel","streamId":"s1"}'])
 })
 
 test('a WebSocket without a session, from another origin or to another path is refused', async (t) => {

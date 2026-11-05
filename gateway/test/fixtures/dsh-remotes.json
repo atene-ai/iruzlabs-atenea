@@ -1,0 +1,1173 @@
+{
+ "versions": [
+  "0.2.0-rc.2",
+  "0.2.1-rc.5"
+ ],
+ "endpoints": {
+  "account/ackBonusNotified": {
+   "stream": false,
+   "args": {
+    "accountId": [],
+    "orderId": [],
+    "client": [
+     "locale",
+     "timezoneOffsetSeconds",
+     "version"
+    ]
+   }
+  },
+  "account/cancelSignIn": {
+   "stream": false,
+   "args": {
+    "attemptId": []
+   }
+  },
+  "account/getBalance": {
+   "stream": false,
+   "args": {
+    "client": [
+     "locale",
+     "timezoneOffsetSeconds",
+     "version"
+    ]
+   }
+  },
+  "account/getProfile": {
+   "stream": false,
+   "args": {
+    "client": [
+     "locale",
+     "timezoneOffsetSeconds",
+     "version"
+    ]
+   }
+  },
+  "account/getState": {
+   "stream": false,
+   "args": {}
+  },
+  "account/getUnnotifiedBonuses": {
+   "stream": false,
+   "args": {
+    "client": [
+     "locale",
+     "timezoneOffsetSeconds",
+     "version"
+    ]
+   }
+  },
+  "account/hasRunningAccountTasks": {
+   "stream": false,
+   "args": {}
+  },
+  "account/signOut": {
+   "stream": false,
+   "args": {
+    "client": [
+     "locale",
+     "timezoneOffsetSeconds",
+     "version"
+    ]
+   }
+  },
+  "account/startSignIn": {
+   "stream": false,
+   "args": {
+    "client": [
+     "locale",
+     "timezoneOffsetSeconds",
+     "version"
+    ],
+    "callbackOrigin": [],
+    "loginSource": []
+   }
+  },
+  "account/watch": {
+   "stream": true,
+   "args": {}
+  },
+  "account/watchExpiry": {
+   "stream": true,
+   "args": {}
+  },
+  "agentPresets/list": {
+   "stream": false,
+   "args": {}
+  },
+  "agentPresets/read": {
+   "stream": false,
+   "args": {
+    "agentPreset": []
+   }
+  },
+  "agentPresets/select": {
+   "stream": false,
+   "args": {
+    "agentId": [],
+    "agentPreset": []
+   }
+  },
+  "commands/execute": {
+   "stream": false,
+   "args": {
+    "agentId": [],
+    "line": [],
+    "submittedAttachments": []
+   }
+  },
+  "commands/list": {
+   "stream": false,
+   "args": {
+    "agentId": []
+   }
+  },
+  "cotTranslation/limits": {
+   "stream": false,
+   "args": {}
+  },
+  "cotTranslation/translate": {
+   "stream": false,
+   "args": {
+    "request": [
+     "provider",
+     "sessionId",
+     "sourceLanguage",
+     "targetLanguage",
+     "text"
+    ]
+   }
+  },
+  "credentials/describe": {
+   "stream": false,
+   "args": {
+    "refs": []
+   }
+  },
+  "credentials/set": {
+   "stream": false,
+   "args": {
+    "ref": [],
+    "value": []
+   }
+  },
+  "credentials/unset": {
+   "stream": false,
+   "args": {
+    "ref": []
+   }
+  },
+  "directoryPicker/createDirectory": {
+   "stream": false,
+   "args": {
+    "path": [],
+    "name": []
+   }
+  },
+  "directoryPicker/list": {
+   "stream": false,
+   "args": {
+    "path": []
+   }
+  },
+  "directoryPicker/pick": {
+   "stream": false,
+   "args": {}
+  },
+  "dynamicCordisRunner/getClientCode": {
+   "stream": false,
+   "args": {
+    "agentId": [],
+    "pluginId": [],
+    "pluginRunId": []
+   }
+  },
+  "dynamicCordisRunner/inventory": {
+   "stream": false,
+   "args": {}
+  },
+  "dynamicCordisRunner/invoke": {
+   "stream": false,
+   "args": {
+    "pluginId": [],
+    "pluginRunId": [],
+    "method": [],
+    "args": []
+   }
+  },
+  "dynamicCordisRunner/reportClientGuardFailure": {
+   "stream": false,
+   "args": {
+    "agentId": [],
+    "pluginId": [],
+    "pluginRunId": [],
+    "failure": [
+     "message",
+     "stack"
+    ]
+   }
+  },
+  "dynamicCordisRunner/reportRenderFailure": {
+   "stream": false,
+   "args": {
+    "agentId": [],
+    "pluginId": [],
+    "pluginRunId": [],
+    "failure": [
+     "abdicated",
+     "message",
+     "slot",
+     "stack"
+    ]
+   }
+  },
+  "dynamicCordisRunner/resolveInspectQuery": {
+   "stream": false,
+   "args": {
+    "agentId": [],
+    "requestId": [],
+    "resolution": [
+     "data",
+     "message",
+     "ok",
+     "reason"
+    ]
+   }
+  },
+  "dynamicCordisRunner/resolveRequestRun": {
+   "stream": false,
+   "args": {
+    "requestId": [],
+    "resolution": [
+     "message",
+     "ok",
+     "pluginRunId",
+     "reason",
+     "stack",
+     "startedHere",
+     "waitingFor"
+    ]
+   }
+  },
+  "dynamicCordisRunner/runHostHalf": {
+   "stream": false,
+   "args": {
+    "agentId": [],
+    "pluginId": [],
+    "packageId": [],
+    "mode": [],
+    "requestId": [],
+    "approveFutureVersions": []
+   }
+  },
+  "dynamicCordisRunner/settleUserRun": {
+   "stream": false,
+   "args": {
+    "agentId": [],
+    "pluginId": [],
+    "resolution": [
+     "message",
+     "ok",
+     "pluginRunId",
+     "reason",
+     "stack",
+     "startedHere",
+     "waitingFor"
+    ]
+   }
+  },
+  "dynamicCordisRunner/stopFromPanel": {
+   "stream": false,
+   "args": {
+    "agentId": [],
+    "pluginId": []
+   }
+  },
+  "dynamicCordisRunner/syncInspectManifest": {
+   "stream": false,
+   "args": {
+    "providers": []
+   }
+  },
+  "dynamicCordisRunner/undefineFromPanel": {
+   "stream": false,
+   "args": {
+    "agentId": [],
+    "pluginId": []
+   }
+  },
+  "fileReferences/list": {
+   "stream": false,
+   "args": {
+    "agentId": [],
+    "query": []
+   }
+  },
+  "fileUploads/upload": {
+   "stream": false,
+   "args": {
+    "agentId": [],
+    "request": [
+     "data",
+     "name"
+    ]
+   }
+  },
+  "goals/clear": {
+   "stream": false,
+   "args": {
+    "agentId": [],
+    "ref": [
+     "id",
+     "revision"
+    ]
+   }
+  },
+  "goals/complete": {
+   "stream": false,
+   "args": {
+    "agentId": [],
+    "ref": [
+     "id",
+     "revision"
+    ]
+   }
+  },
+  "goals/create": {
+   "stream": false,
+   "args": {
+    "agentId": [],
+    "request": [
+     "maxGoalRounds",
+     "objective"
+    ]
+   }
+  },
+  "goals/edit": {
+   "stream": false,
+   "args": {
+    "agentId": [],
+    "ref": [
+     "id",
+     "revision"
+    ],
+    "request": [
+     "maxGoalRounds",
+     "objective"
+    ]
+   }
+  },
+  "goals/get": {
+   "stream": false,
+   "args": {
+    "agentId": []
+   }
+  },
+  "goals/pause": {
+   "stream": false,
+   "args": {
+    "agentId": [],
+    "ref": [
+     "id",
+     "revision"
+    ]
+   }
+  },
+  "goals/resume": {
+   "stream": false,
+   "args": {
+    "agentId": [],
+    "ref": [
+     "id",
+     "revision"
+    ]
+   }
+  },
+  "job/follow": {
+   "stream": true,
+   "args": {
+    "request": [
+     "from",
+     "jobId",
+     "sessionId"
+    ]
+   }
+  },
+  "job/kill": {
+   "stream": false,
+   "args": {
+    "request": [
+     "jobId",
+     "sessionId"
+    ]
+   }
+  },
+  "job/list": {
+   "stream": true,
+   "args": {
+    "request": [
+     "sessionId"
+    ]
+   }
+  },
+  "llm/discoverModels": {
+   "stream": false,
+   "args": {
+    "settingsNs": [],
+    "request": [
+     "api",
+     "apiKey",
+     "baseURL",
+     "provider"
+    ]
+   }
+  },
+  "llm/listConfigurableProviders": {
+   "stream": false,
+   "args": {}
+  },
+  "llm/listProviders": {
+   "stream": false,
+   "args": {}
+  },
+  "messageFeedback/delete": {
+   "stream": false,
+   "args": {
+    "request": [
+     "ifVersion",
+     "messageId",
+     "sessionId"
+    ]
+   }
+  },
+  "messageFeedback/list": {
+   "stream": false,
+   "args": {
+    "request": [
+     "sessionId"
+    ]
+   }
+  },
+  "messageFeedback/put": {
+   "stream": false,
+   "args": {
+    "request": [
+     "category",
+     "ifVersion",
+     "messageId",
+     "note",
+     "rating",
+     "sessionId"
+    ]
+   }
+  },
+  "officeToPdf/generation": {
+   "stream": false,
+   "args": {}
+  },
+  "officeToPdf/render": {
+   "stream": false,
+   "args": {
+    "workspaceFileScopeId": [],
+    "path": [],
+    "priority": []
+   }
+  },
+  "permissionPresets/catalog": {
+   "stream": false,
+   "args": {}
+  },
+  "pluginInventory/list": {
+   "stream": false,
+   "args": {}
+  },
+  "pluginManager/cancelInstall": {
+   "stream": false,
+   "args": {
+    "requestId": []
+   }
+  },
+  "pluginManager/inspect": {
+   "stream": false,
+   "args": {
+    "spec": [],
+    "options": [
+     "registry"
+    ]
+   }
+  },
+  "pluginManager/installBundle": {
+   "stream": false,
+   "args": {
+    "spec": [],
+    "options": [
+     "approvedBuilds",
+     "enabled",
+     "registry",
+     "requestId",
+     "saveExact"
+    ]
+   }
+  },
+  "pluginManager/listBundles": {
+   "stream": false,
+   "args": {}
+  },
+  "pluginManager/listPlugins": {
+   "stream": false,
+   "args": {}
+  },
+  "pluginManager/listVersionExemptions": {
+   "stream": false,
+   "args": {}
+  },
+  "pluginManager/registries": {
+   "stream": false,
+   "args": {}
+  },
+  "pluginManager/removeBundle": {
+   "stream": false,
+   "args": {
+    "name": []
+   }
+  },
+  "pluginManager/setBundleEnabled": {
+   "stream": false,
+   "args": {
+    "name": [],
+    "enabled": []
+   }
+  },
+  "pluginManager/setPluginEnabled": {
+   "stream": false,
+   "args": {
+    "id": [],
+    "enabled": []
+   }
+  },
+  "pluginManager/setVersionExemption": {
+   "stream": false,
+   "args": {
+    "packageVersion": [],
+    "runtimeVersion": [],
+    "enabled": [],
+    "acceptRisk": []
+   }
+  },
+  "pluginManager/waitForInstall": {
+   "stream": false,
+   "args": {
+    "requestId": []
+   }
+  },
+  "pluginMarket/listIndexes": {
+   "stream": false,
+   "args": {}
+  },
+  "pluginMarket/search": {
+   "stream": false,
+   "args": {
+    "url": [],
+    "query": [
+     "category",
+     "fetchedAt",
+     "labels",
+     "limit",
+     "offset",
+     "refresh",
+     "sort",
+     "text"
+    ]
+   }
+  },
+  "pluginMarket/setIndexes": {
+   "stream": false,
+   "args": {
+    "urls": []
+   }
+  },
+  "pluginRegistryProbe/fastest": {
+   "stream": false,
+   "args": {}
+  },
+  "productAnalytics/enabled": {
+   "stream": false,
+   "args": {}
+  },
+  "productAnalytics/report": {
+   "stream": false,
+   "args": {
+    "event": [
+     "attributes",
+     "eventName",
+     "timestamp"
+    ]
+   }
+  },
+  "productAnalytics/watchPolicy": {
+   "stream": true,
+   "args": {}
+  },
+  "remoteAccess/follow": {
+   "stream": true,
+   "args": {}
+  },
+  "schedule/catalog": {
+   "stream": false,
+   "args": {}
+  },
+  "schedule/delete": {
+   "stream": false,
+   "args": {
+    "request": [
+     "id",
+     "sessionId"
+    ]
+   }
+  },
+  "schedule/history": {
+   "stream": false,
+   "args": {
+    "request": [
+     "before",
+     "id",
+     "limit",
+     "sessionId"
+    ]
+   }
+  },
+  "schedule/list": {
+   "stream": false,
+   "args": {
+    "request": [
+     "sessionId"
+    ]
+   }
+  },
+  "schedule/update": {
+   "stream": false,
+   "args": {
+    "request": [
+     "change",
+     "expected",
+     "id",
+     "prompt",
+     "sessionId",
+     "title"
+    ]
+   }
+  },
+  "session/attachment": {
+   "stream": false,
+   "args": {
+    "request": [
+     "attachmentId",
+     "sessionId"
+    ]
+   }
+  },
+  "session/canOpenWorkspacePath": {
+   "stream": false,
+   "args": {}
+  },
+  "session/cancel": {
+   "stream": false,
+   "args": {
+    "request": [
+     "sessionId"
+    ]
+   }
+  },
+  "session/control": {
+   "stream": true,
+   "args": {}
+  },
+  "session/create": {
+   "stream": false,
+   "args": {
+    "request": [
+     "agentPreset",
+     "cwd",
+     "sessionId",
+     "workspaceId"
+    ]
+   }
+  },
+  "session/follow": {
+   "stream": true,
+   "args": {
+    "request": [
+     "address",
+     "assistantStream",
+     "maxMessages",
+     "turnWindow"
+    ]
+   }
+  },
+  "session/fork": {
+   "stream": false,
+   "args": {
+    "request": [
+     "allowMigration",
+     "atSeq",
+     "sessionId"
+    ]
+   }
+  },
+  "session/initializeDefaultModel": {
+   "stream": false,
+   "args": {}
+  },
+  "session/list": {
+   "stream": false,
+   "args": {
+    "_request": [
+     "cursor"
+    ]
+   }
+  },
+  "session/modelCatalog": {
+   "stream": false,
+   "args": {}
+  },
+  "session/openWorkspacePath": {
+   "stream": false,
+   "args": {
+    "request": [
+     "action",
+     "application",
+     "path"
+    ]
+   }
+  },
+  "session/page": {
+   "stream": false,
+   "args": {
+    "request": [
+     "address",
+     "beforeSeq",
+     "maxMessages",
+     "throughSeq",
+     "turnWindow"
+    ]
+   }
+  },
+  "session/projections": {
+   "stream": false,
+   "args": {
+    "request": [
+     "sessionId"
+    ]
+   }
+  },
+  "session/prompt": {
+   "stream": false,
+   "args": {
+    "request": [
+     "clientTimeZone",
+     "content",
+     "mode",
+     "requestId",
+     "sessionId"
+    ]
+   }
+  },
+  "session/rename": {
+   "stream": false,
+   "args": {
+    "request": [
+     "sessionId",
+     "title"
+    ]
+   }
+  },
+  "session/search": {
+   "stream": false,
+   "args": {
+    "request": [
+     "query"
+    ]
+   }
+  },
+  "session/selectModel": {
+   "stream": false,
+   "args": {
+    "request": [
+     "model",
+     "provider",
+     "reasoningEffort",
+     "sessionId"
+    ]
+   }
+  },
+  "session/updateQueue": {
+   "stream": false,
+   "args": {
+    "request": [
+     "action",
+     "itemId",
+     "sessionId"
+    ]
+   }
+  },
+  "session/workspacePathApplications": {
+   "stream": false,
+   "args": {
+    "request": [
+     "path"
+    ]
+   }
+  },
+  "sessionFeedback/record": {
+   "stream": false,
+   "args": {
+    "request": [
+     "category",
+     "sessionId",
+     "text"
+    ]
+   }
+  },
+  "sessionReferenceResolver/candidates": {
+   "stream": false,
+   "args": {
+    "agentId": [],
+    "query": []
+   }
+  },
+  "settings/describe": {
+   "stream": false,
+   "args": {}
+  },
+  "settings/mutate": {
+   "stream": false,
+   "args": {
+    "ns": [],
+    "ops": [],
+    "expectedRevision": []
+   }
+  },
+  "settings/openSettingsDocument": {
+   "stream": false,
+   "args": {}
+  },
+  "settings/replace": {
+   "stream": false,
+   "args": {
+    "ns": [],
+    "section": [],
+    "expectedRevision": []
+   }
+  },
+  "settings/update": {
+   "stream": false,
+   "args": {
+    "ns": [],
+    "patch": [],
+    "expectedRevision": []
+   }
+  },
+  "skills/list": {
+   "stream": false,
+   "args": {
+    "request": [
+     "sessionId"
+    ]
+   }
+  },
+  "speech/cancelPreparation": {
+   "stream": false,
+   "args": {
+    "providerId": []
+   }
+  },
+  "speech/catalog": {
+   "stream": false,
+   "args": {}
+  },
+  "speech/configure": {
+   "stream": false,
+   "args": {
+    "patch": [
+     "language",
+     "providerId"
+    ]
+   }
+  },
+  "speech/follow": {
+   "stream": true,
+   "args": {}
+  },
+  "speech/prepare": {
+   "stream": false,
+   "args": {
+    "providerId": [],
+    "options": [
+     "downloadSource"
+    ]
+   }
+  },
+  "speech/transcribe": {
+   "stream": false,
+   "args": {
+    "request": [
+     "audioBase64",
+     "language",
+     "providerId"
+    ]
+   }
+  },
+  "subagents/interruptByParent": {
+   "stream": false,
+   "args": {
+    "childSessionId": [],
+    "parentSessionId": [],
+    "mode": []
+   }
+  },
+  "subagents/prompt": {
+   "stream": false,
+   "args": {
+    "request": [
+     "childSessionId",
+     "clientTimeZone",
+     "content",
+     "delivery",
+     "mode",
+     "parentSessionId",
+     "requestId"
+    ]
+   }
+  },
+  "terminal/attach": {
+   "stream": true,
+   "args": {
+    "agentId": [],
+    "id": []
+   }
+  },
+  "terminal/close": {
+   "stream": false,
+   "args": {
+    "agentId": [],
+    "id": []
+   }
+  },
+  "terminal/create": {
+   "stream": false,
+   "args": {
+    "agentId": [],
+    "request": [
+     "cols",
+     "id",
+     "rows",
+     "shellPath"
+    ]
+   }
+  },
+  "terminal/environment": {
+   "stream": false,
+   "args": {
+    "agentId": []
+   }
+  },
+  "terminal/follow": {
+   "stream": true,
+   "args": {
+    "agentId": [],
+    "id": [],
+    "attachmentId": []
+   }
+  },
+  "terminal/list": {
+   "stream": false,
+   "args": {
+    "sessionId": []
+   }
+  },
+  "terminal/rename": {
+   "stream": false,
+   "args": {
+    "agentId": [],
+    "id": [],
+    "title": []
+   }
+  },
+  "terminal/resize": {
+   "stream": false,
+   "args": {
+    "agentId": [],
+    "id": [],
+    "attachmentId": [],
+    "cols": [],
+    "rows": []
+   }
+  },
+  "terminal/retain": {
+   "stream": true,
+   "args": {
+    "sessionId": [],
+    "id": []
+   }
+  },
+  "terminal/shells": {
+   "stream": false,
+   "args": {
+    "agentId": []
+   }
+  },
+  "terminal/write": {
+   "stream": false,
+   "args": {
+    "agentId": [],
+    "id": [],
+    "attachmentId": [],
+    "data": []
+   }
+  },
+  "userQuestions/answer": {
+   "stream": false,
+   "args": {
+    "agentId": [],
+    "callId": [],
+    "answer": [
+     "answers"
+    ]
+   }
+  },
+  "userQuestions/attachWait": {
+   "stream": true,
+   "args": {
+    "agentId": [],
+    "callId": []
+   }
+  },
+  "workspace/archiveSession": {
+   "stream": false,
+   "args": {
+    "request": [
+     "sessionId",
+     "stopActivity"
+    ]
+   }
+  },
+  "workspace/create": {
+   "stream": false,
+   "args": {
+    "request": [
+     "path"
+    ]
+   }
+  },
+  "workspace/delete": {
+   "stream": false,
+   "args": {
+    "request": [
+     "workspaceId"
+    ]
+   }
+  },
+  "workspace/follow": {
+   "stream": true,
+   "args": {}
+  },
+  "workspace/initializeDefault": {
+   "stream": false,
+   "args": {}
+  },
+  "workspace/insertBefore": {
+   "stream": false,
+   "args": {
+    "request": [
+     "beforeWorkspaceId",
+     "workspaceId"
+    ]
+   }
+  },
+  "workspace/insertSessionBefore": {
+   "stream": false,
+   "args": {
+    "request": [
+     "beforeSessionId",
+     "sessionId",
+     "workspaceId"
+    ]
+   }
+  },
+  "workspace/pinSession": {
+   "stream": false,
+   "args": {
+    "request": [
+     "sessionId"
+    ]
+   }
+  },
+  "workspace/rename": {
+   "stream": false,
+   "args": {
+    "request": [
+     "title",
+     "workspaceId"
+    ]
+   }
+  },
+  "workspace/unarchiveSession": {
+   "stream": false,
+   "args": {
+    "request": [
+     "sessionId"
+    ]
+   }
+  },
+  "workspace/unpinSession": {
+   "stream": false,
+   "args": {
+    "request": [
+     "sessionId"
+    ]
+   }
+  },
+  "workspaceFiles/changes": {
+   "stream": true,
+   "args": {
+    "workspaceFileScopeId": [],
+    "path": []
+   }
+  },
+  "workspaceFiles/list": {
+   "stream": false,
+   "args": {
+    "workspaceFileScopeId": [],
+    "path": []
+   }
+  },
+  "workspaceFiles/read": {
+   "stream": false,
+   "args": {
+    "workspaceFileScopeId": [],
+    "path": [],
+    "range": [
+     "limit",
+     "offset"
+    ]
+   }
+  },
+  "workspaceFiles/readBytes": {
+   "stream": false,
+   "args": {
+    "workspaceFileScopeId": [],
+    "path": [],
+    "options": [
+     "baseFile",
+     "range"
+    ]
+   }
+  },
+  "workspaceFiles/stat": {
+   "stream": false,
+   "args": {
+    "workspaceFileScopeId": [],
+    "path": []
+   }
+  }
+ }
+}

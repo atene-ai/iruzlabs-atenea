@@ -11,6 +11,8 @@ import { authorizeUrl, exchangeCode, logoutUrl, OidcError, pkcePair, randomToken
 import { errorPage, noAccessPage, sendJson, sendPage, unavailablePage } from './pages.js'
 import { decide } from './policy.js'
 import { forwardHttp, forwardUpgrade, refuse, upstreamHeaders } from './proxy.js'
+import { createSessionAccess } from './session-access.js'
+import { createSessionGuard } from './session-guard.js'
 import { createSessionStore, SESSION_COOKIE } from './sessions.js'
 
 // __Host- keeps a sibling subdomain from planting a login state of its own.
@@ -172,6 +174,11 @@ export function createGateway(config, { fetch = globalThis.fetch, now = Date.now
     slaToken: session.idToken,
   })
 
+  // ds-bot answers which DSH Sessions each person may read or write; the guard holds
+  // dsh's own Session calls and streams to that.
+  const sessionAccess = createSessionAccess({ link, now, headersFor: (session, cookie) => headersFor({ headers: {} }, session)(cookie) })
+  const guard = createSessionGuard({ access: sessionAccess, log })
+
   // Long-lived responses and WebSockets of a session close with it.
   function hold(session, connection, done) {
     session.live.add(connection)
@@ -317,13 +324,19 @@ export function createGateway(config, { fetch = globalThis.fetch, now = Date.now
     if (!SAFE_METHODS.has(req.method) && !sameOrigin(req)) return sendJson(res, 403, { error: 'atenea/cross-origin' })
     const decision = decide({ method: req.method, pathname: url.pathname, searchParams: url.searchParams }, config)
     if (!decision.allow) return sendJson(res, decision.status, { error: 'atenea/blocked', reason: decision.reason })
+    const extraHeaders = auth.cookie === undefined ? {} : { 'set-cookie': auth.cookie }
+    const checked = await guard.request(req, url, auth.session)
+    if (checked.refuse !== undefined) return sendJson(res, checked.refuse.status, checked.refuse.body, extraHeaders)
     hold(auth.session, res, 'close')
     await forwardHttp(req, res, {
       link,
       agent,
       path: upstreamPath(url),
       headersFor: headersFor(req, auth.session),
-      extraHeaders: auth.cookie === undefined ? {} : { 'set-cookie': auth.cookie },
+      extraHeaders,
+      body: checked.body,
+      transform: checked.transform,
+      onStatus: checked.onStatus,
     })
   }
 
@@ -352,7 +365,13 @@ export function createGateway(config, { fetch = globalThis.fetch, now = Date.now
       const decision = decide({ method: req.method, pathname: url.pathname, searchParams: url.searchParams, upgrade: true }, config)
       if (!decision.allow) return refuse(socket, decision.status, 'Refused')
       hold(auth.session, socket, 'close')
-      await forwardUpgrade(req, socket, head, { link, path: upstreamPath(url), headersFor: headersFor(req, auth.session) })
+      const { session } = auth
+      await forwardUpgrade(req, socket, head, {
+        link,
+        path: upstreamPath(url),
+        headersFor: headersFor(req, session),
+        decide: event => guard.streamMessage(session, event),
+      })
     } catch (error) {
       log(`gateway: WebSocket failed: ${error?.message ?? error}`)
       refuse(socket, error instanceof DshUnavailable ? 503 : 502, 'Bad Gateway')
@@ -363,6 +382,7 @@ export function createGateway(config, { fetch = globalThis.fetch, now = Date.now
   // WebSockets within a minute even when it sends no requests.
   async function sweep() {
     sessions.sweep()
+    sessionAccess.sweep()
     prunePendingLogins()
     await Promise.all(sessions.all().filter(session => session.live.size > 0).map(async (session) => {
       try {
@@ -404,6 +424,7 @@ export function createGateway(config, { fetch = globalThis.fetch, now = Date.now
   return {
     server,
     sessions,
+    sessionAccess,
     link,
     sweep,
     listen(port = config.port, host = config.host) {

@@ -534,6 +534,110 @@ test('a person\'s messages carry their name for the Bots, in chats and in groups
 })
 
 // ---------------------------------------------------------------------------
+// Session access, for the gateway's checks of DSH's own Session calls
+
+// b1 has moved on to a second part of its chat, r3's members have their group Sessions
+// (b2's with an earlier part) and r3 an earlier part of its own; r1 has b4's group Session.
+function partedTeam() {
+  const state = team()
+  Object.assign(state.bots.b1, { sessionId: 'b1-now', segments: [{ sessionId: 'b1-mid', startedAt: 1, endedAt: 2 }] })
+  Object.assign(state.rooms.r3, { sessions: { b1: 'g-r3-b1', b2: 'g-r3-b2' }, segments: { b2: [{ sessionId: 'g-r3-b2-old', startedAt: 1, endedAt: 2 }] }, parts: [{ sessionId: 'r3-old', startedAt: 1, endedAt: 2 }] })
+  Object.assign(state.rooms.r1, { sessions: { b4: 'g-r1-b4' } })
+  return state
+}
+
+// DSH's Session list names the parents of cold subagent Sessions; a live one names its
+// own parent on its Agent.
+function withSubagents(ctx) {
+  const listed = { calls: 0 }
+  ctx.sessionController.list = async () => {
+    listed.calls += 1
+    return { items: [
+      { sessionId: 'sub-1', parentSessionId: 'b1-now', origin: 'subagent' },
+      { sessionId: 'sub-2', parentSessionId: 'sub-1', origin: 'subagent' },
+      { sessionId: 'sub-3', parentSessionId: 'b3', origin: 'subagent' },
+      { sessionId: 'dsh-own' },
+    ] }
+  }
+  const agents = new Map([['live-sub', { id: 'live-sub', session: { header: { id: 'live-sub', parentSession: 'g-r3-b2' } } }]])
+  const services = ctx.get
+  ctx.get = name => (name === 'agents' ? agents : services(name))
+  return listed
+}
+
+test('session access maps every kind of Bot Session to its Bot and answers with the caller\'s role', async (t) => {
+  const { ctx, call, stop } = start(partedTeam())
+  t.after(stop)
+  const listed = withSubagents(ctx)
+  const ids = ['b1', 'b1-now', 'b1-mid', 'b2', 'b3', 'b4', 'm1', 'r1', 'g-r1-b4', 'r2', 'r3', 'g-r3-b1', 'g-r3-b2-old', 'r3-old', 'sub-1', 'sub-2', 'sub-3', 'live-sub', 'dsh-own', 'never-seen']
+  const answer = await call('session-access', { sessionIds: ids })
+  assert.equal(answer.ok, true)
+  assert.deepEqual(answer.value.sessions, {
+    // Her own Bot: its first Session, its current part and an earlier part.
+    b1: { allowed: 'write', botId: 'b1' },
+    'b1-now': { allowed: 'write', botId: 'b1' },
+    'b1-mid': { allowed: 'write', botId: 'b1' },
+    b2: { allowed: 'read', botId: 'b2' },
+    b4: { allowed: 'write', botId: 'b4' },
+    // Hidden Bots, a Main Bot not shared with her, and Sessions of DSH's own: nothing,
+    // not even whose they are.
+    b3: { allowed: 'none' },
+    m1: { allowed: 'none' },
+    r2: { allowed: 'none' },
+    'dsh-own': { allowed: 'none' },
+    'never-seen': { allowed: 'none' },
+    // A group answers as far as every member allows, its member Sessions too.
+    r1: { allowed: 'write', roomId: 'r1' },
+    'g-r1-b4': { allowed: 'write', botId: 'b4', roomId: 'r1' },
+    r3: { allowed: 'read', roomId: 'r3' },
+    'g-r3-b1': { allowed: 'read', botId: 'b1', roomId: 'r3' },
+    'g-r3-b2-old': { allowed: 'read', botId: 'b2', roomId: 'r3' },
+    'r3-old': { allowed: 'read', roomId: 'r3' },
+    // Subagents answer for the Session they were spawned from, however deep.
+    'sub-1': { allowed: 'write', botId: 'b1' },
+    'sub-2': { allowed: 'write', botId: 'b1' },
+    'sub-3': { allowed: 'none' },
+    'live-sub': { allowed: 'read', botId: 'b2', roomId: 'r3' },
+  })
+  // One batch lists DSH's Sessions once, however many it could not place.
+  assert.equal(listed.calls, 1)
+})
+
+test('session access follows the roles: Main Bots, superadmins and DSH\'s own Sessions', async (t) => {
+  const { ctx, call, stop } = start(partedTeam())
+  t.after(stop)
+  withSubagents(ctx)
+  const ask = async (claims, ...sessionIds) => (await call('session-access', { sessionIds }, claims)).value.sessions
+  // An editor of a Main Bot still only reads it.
+  assert.deepEqual(await ask(MAIN_EDITOR, 'm1', 'b1'), { m1: { allowed: 'read', botId: 'm1' }, b1: { allowed: 'write', botId: 'b1' } })
+  // A superadmin writes everywhere, DSH's own Sessions included.
+  assert.deepEqual(await ask(BOSS, 'b3', 'sub-3', 'dsh-own', 'r2'), {
+    b3: { allowed: 'write', botId: 'b3' },
+    'sub-3': { allowed: 'write', botId: 'b3' },
+    'dsh-own': { allowed: 'write' },
+    r2: { allowed: 'write', roomId: 'r2' },
+  })
+  // Someone with no shares sees nothing.
+  assert.deepEqual(await ask(claimsOf({ sub: 'u-new', agents: {} }), 'b1', 'r1'), { b1: { allowed: 'none' }, r1: { allowed: 'none' } })
+})
+
+test('session access takes a bounded batch of ids and needs a shared server', async (t) => {
+  const { call, stop } = start()
+  t.after(stop)
+  const refused = async payload => (await call('session-access', payload)).error
+  assert.equal((await refused({})).code, 'bot/invalid')
+  assert.equal((await refused({ sessionIds: 'b1' })).code, 'bot/invalid')
+  assert.equal((await refused({ sessionIds: ['b1', 7] })).code, 'bot/invalid')
+  assert.equal((await refused({ sessionIds: [''] })).code, 'bot/invalid')
+  assert.equal((await refused({ sessionIds: Array.from({ length: 501 }, (_, index) => `s${index}`) })).code, 'bot/invalid')
+  // Repeated ids are answered once.
+  assert.deepEqual((await call('session-access', { sessionIds: ['b2', 'b2'] })).value, { sessions: { b2: { allowed: 'read', botId: 'b2' } } })
+  const single = start(team(), { multiuser: false })
+  t.after(single.stop)
+  assert.equal((await single.call('session-access', { sessionIds: ['b1'] }, undefined)).error.code, 'bot/unavailable')
+})
+
+// ---------------------------------------------------------------------------
 // Off by default
 
 test('without ATENEA_MULTIUSER nothing changes: no identity needed, no access fields', async (t) => {

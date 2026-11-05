@@ -18,11 +18,17 @@ RUN corepack enable \
 COPY ds-bot/ /src/ds-bot/
 
 # ds-bot has no build step at install (client.js is committed), so pack it as-is
-# and let `dsh plugin add` set up the web profile from dsh's own template.
+# and let `dsh plugin add` set up the web profile from dsh's own template. The
+# package is named after its content: the entrypoint installs it into a volume
+# seeded by an older image, and a new name is what makes pnpm take the new code.
 RUN cd /src/ds-bot \
     && npm pack --pack-destination /tmp \
-    && mv /tmp/ds-bot-*.tgz /tmp/ds-bot.tgz \
-    && DSH_HOME=/opt/dsh-template dsh plugin --profile web add /tmp/ds-bot.tgz
+    && mkdir -p /opt/ds-bot \
+    && id="ds-bot-$(sha256sum /tmp/ds-bot-*.tgz | cut -c1-16).tgz" \
+    && mv /tmp/ds-bot-*.tgz "/opt/ds-bot/$id" \
+    && DSH_HOME=/opt/dsh-template dsh plugin --profile web add "/opt/ds-bot/$id" \
+    && printf '%s\n' "$id" > /opt/ds-bot/package-id \
+    && cp /opt/ds-bot/package-id /opt/dsh-template/profiles/web/.ds-bot-package
 
 FROM node:24-bookworm-slim
 
@@ -36,6 +42,12 @@ RUN apt-get update \
 
 COPY --from=build /usr/local/ /usr/local/
 COPY --from=build /opt/dsh-template /opt/dsh-template
+# The packed plugin, pnpm itself (corepack's copy), and pnpm's metadata cache and store
+# from the install, so the entrypoint can install it into an existing volume offline.
+COPY --from=build /opt/ds-bot/ /opt/ds-bot/
+COPY --from=build /root/.cache/node/corepack /root/.cache/node/corepack
+COPY --from=build /root/.cache/pnpm /root/.cache/pnpm
+COPY --from=build /root/.local/share/pnpm/store /root/.local/share/pnpm/store
 COPY --chmod=0755 docker/entrypoint.sh /usr/local/bin/entrypoint.sh
 COPY docker/docker.patch.yml /opt/ds-bot/docker.patch.yml
 # Applied only with ATENEA_SERVER_MODE=1 (behind the Atenea gateway, gateway/).

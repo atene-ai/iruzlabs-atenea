@@ -78,6 +78,22 @@ try {
   `)
   console.log('PASS: executable entrypoint and first start')
 
+  // A volume seeded by an older image: another package spec and that image's plugin files.
+  shell(`
+    test "$(cat /data/profiles/web/.ds-bot-package)" = "$(cat /opt/ds-bot/package-id)"
+    sed -i 's#"ds-bot": "file:[^"]*"#"ds-bot": "file:/tmp/ds-bot.tgz"#' /data/profiles/web/package.json
+    rm -f /data/profiles/web/.ds-bot-package /data/profiles/web/node_modules/ds-bot/src/host/access.js
+  `)
+  startHelp(1000, 1000)
+  shell(`
+    id=$(cat /opt/ds-bot/package-id)
+    test "$(cat /data/profiles/web/.ds-bot-package)" = "$id"
+    test -f /data/profiles/web/node_modules/ds-bot/src/host/access.js
+    grep -q "\\"ds-bot\\": \\"file:/opt/ds-bot/$id\\"" /data/profiles/web/package.json
+    test -z "$(find -P /data/profiles/web -xdev ! -uid 1000 -print -quit)"
+  `)
+  console.log('PASS: an image update installs its ds-bot into an existing volume')
+
   startHelp(1234, 1234)
   checkDataOwner(1234, 1234)
   console.log('PASS: UID/GID migration preserves data and workspace link targets')

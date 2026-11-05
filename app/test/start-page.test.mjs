@@ -62,7 +62,7 @@ test('the page sends only the acts of the start window', () => {
     ...[...code['start.js'].matchAll(/\bact: '(\w+)'|\bact\('(\w+)'/gu)].map(match => match[1] ?? match[2]),
     ...[...code['whale.js'].matchAll(/\bact\('(\w+)'\)/gu)].map(match => match[1]),
   ].filter(name => !local.has(name)))
-  assert.deepEqual([...sent].sort(), ['answer', 'copyDetails', 'freshStart', 'handoffDone', 'handoffShow', 'importModel', 'importOption', 'installUpdate', 'keepCopying', 'manualDownload', 'openLogs', 'pick', 'reloadView', 'retry', 'stopCopy', 'wait'])
+  assert.deepEqual([...sent].sort(), ['answer', 'copyDetails', 'freshStart', 'handoffDone', 'handoffShow', 'importModel', 'importOption', 'installUpdate', 'keepCopying', 'link', 'manualDownload', 'openLogs', 'pick', 'reconnect', 'reloadView', 'retry', 'stopCopy', 'wait'])
   // Every act the main process takes is one that the page sends, under the same name.
   for (const name of START_ACTS) assert.ok(sent.has(name), `the main process takes ${name}, which the page never sends`)
 })
@@ -73,10 +73,13 @@ const layerOf = key => key.split('.')[0]
 // {name} and {name|one|many} (an English count) both name one placeholder.
 const PLACEHOLDER = /\{(\w+)(?:\|[^}]*)?\}/gu
 
-test('zh and en carry the same keys and the same placeholders', () => {
+test('zh, en and es carry the same keys and the same placeholders', () => {
   const placeholders = text => [...text.matchAll(PLACEHOLDER)].map(match => match[1]).sort().join()
-  assert.deepEqual(Object.keys(TEXT.en).sort(), Object.keys(TEXT.zh).sort())
-  for (const [key, zh] of Object.entries(TEXT.zh)) assert.equal(placeholders(TEXT.en[key]), placeholders(zh), `${key}: placeholders differ`)
+  assert.deepEqual(Object.keys(TEXT).sort(), ['en', 'es', 'zh'])
+  for (const lang of ['en', 'es']) {
+    assert.deepEqual(Object.keys(TEXT[lang]).sort(), Object.keys(TEXT.zh).sort(), lang)
+    for (const [key, zh] of Object.entries(TEXT.zh)) assert.equal(placeholders(TEXT[lang][key]), placeholders(zh), `${lang} ${key}: placeholders differ`)
+  }
 })
 
 test('every text key starts with one of the ten layers', () => {
@@ -95,23 +98,23 @@ test('each layer ends its lines as its rule says', () => {
   ])
   for (const key of Object.keys(TEXT.zh)) {
     const zh = TEXT.zh[key]
-    const en = TEXT.en[key]
+    const others = [['en', TEXT.en[key]], ['es', TEXT.es[key]]]
     if (BARE.has(layerOf(key))) {
       assert.doesNotMatch(zh, /。$/u, `${key}: zh ends with a full stop`)
-      assert.doesNotMatch(en, /\.$/u, `${key}: en ends with a full stop`)
+      for (const [lang, text] of others) assert.doesNotMatch(text, /\.$/u, `${key}: ${lang} ends with a full stop`)
     } else if (key.startsWith('reason.copy.')) {
       // A fragment set into a sentence.
       assert.doesNotMatch(zh, /[。？！，]$/u, `${key}: a fragment ends with punctuation`)
-      assert.doesNotMatch(en, /[.?!,]$/u, `${key}: a fragment ends with punctuation`)
+      for (const [, text] of others) assert.doesNotMatch(text, /[.?!,]$/u, `${key}: a fragment ends with punctuation`)
     } else if (!NOT_SENTENCES.has(key)) {
       // A reason or a footnote states; only a card or a dialog may ask.
       const ends = layerOf(key) === 'reason' || layerOf(key) === 'note' ? [/。$/u, /\.$/u] : [/[。？]$/u, /[.?]$/u]
       assert.match(zh, ends[0], `${key}: zh is not a whole sentence`)
-      assert.match(en, ends[1], `${key}: en is not a whole sentence`)
+      for (const [lang, text] of others) assert.match(text, ends[1], `${key}: ${lang} is not a whole sentence`)
     }
     if (key === 'dialog.pickRoot' || key === 'dialog.pickMove') {
       assert.doesNotMatch(zh, /。$/u, `${key}: a picker title ends with a full stop`)
-      assert.doesNotMatch(en, /\.$/u, `${key}: a picker title ends with a full stop`)
+      for (const [, text] of others) assert.doesNotMatch(text, /\.$/u, `${key}: a picker title ends with a full stop`)
     }
   }
 })
@@ -133,8 +136,7 @@ test('a button that opens the system picker ends with …', () => {
   for (const tag of picks) {
     const key = tag.match(/data-t="([^"]+)"/u)?.[1]
     assert.ok(key !== undefined, `a pick button without text: ${tag}`)
-    assert.match(TEXT.zh[key], /…$/u, `${key}: a pick button`)
-    assert.match(TEXT.en[key], /…$/u, `${key}: a pick button`)
+    for (const lang of ['zh', 'en', 'es']) assert.match(TEXT[lang][key], /…$/u, `${lang} ${key}: a pick button`)
   }
 })
 
@@ -143,7 +145,7 @@ import { PRODUCT_NAME } from '../src/legacy.mjs'
 // docs/plans/2026-10-26-windows-onboarding.md, 用词: proper names and units only.
 test('the zh copy shows no English but the allowed names and units', () => {
   const NAMES = [PRODUCT_NAME, 'Atenea', 'Iruz Labs', 'Iruz', 'DS Bot', 'DSH Desktop', 'DSH Web']
-  const WORDS = new Set(['DeepSeek', 'Bot', 'API', 'Key', 'Harness', 'DSH', 'Agent', 'MCP', 'Windows', 'PowerShell', 'GitHub', 'SmartScreen', 'OneDrive', 'HTTP', 'SOCKS', 'KB', 'MB', 'GB'])
+  const WORDS = new Set(['DeepSeek', 'Bot', 'API', 'Key', 'Harness', 'DSH', 'Agent', 'MCP', 'Windows', 'PowerShell', 'GitHub', 'SmartScreen', 'OneDrive', 'HTTP', 'SOCKS', 'KB', 'MB', 'GB', 'VPN', 'https', 'Cognito'])
   const english = []
   for (const [key, value] of Object.entries(TEXT.zh)) {
     let rest = value.replace(PLACEHOLDER, ' ')
@@ -171,7 +173,10 @@ test('every text key that the page uses exists', () => {
   }
   // Keys the page builds from the snapshot's views, the stages and the failure reasons.
   for (const key of ['voice.failed', 'voice.viewFailed', 'voice.opening', 'voice.moving', 'status.phase.data', 'status.phase.engine', 'status.phase.team', 'status.state.pending', 'status.state.active', 'status.state.done', 'status.state.failed']) assert.ok(key in TEXT.zh, key)
-  assert.deepEqual(matching('reason.start.{reason}').sort(), ['reason.start.engine', 'reason.start.files', 'reason.start.other', 'reason.start.permission', 'reason.start.space'])
+  assert.deepEqual(matching('reason.start.{reason}').sort(), ['reason.start.engine', 'reason.start.files', 'reason.start.other', 'reason.start.permission', 'reason.start.server', 'reason.start.space'])
+  // The server mode cards' variants (main.mjs).
+  assert.deepEqual(matching('card.vpn.{problem}').sort(), ['card.vpn.auto', 'card.vpn.away', 'card.vpn.tls'])
+  assert.deepEqual(matching('card.link.{problem}').sort(), ['card.link.lead', 'card.link.spent', 'card.link.wrong'])
   assert.deepEqual(matching('reason.place.{reason}').sort(), ['reason.place.dsh', 'reason.place.foreign', 'reason.place.nested', 'reason.place.onedrive', 'reason.place.permission', 'reason.place.program', 'reason.place.space'])
   assert.deepEqual(matching('reason.copy.{reason}').sort(), ['reason.copy.full', 'reason.copy.inUse', 'reason.copy.permission'])
 })
@@ -209,14 +214,25 @@ test('t picks the English singular or plural by the value', () => {
   assert.equal(t('en', 'hint.reinstall', { bots: 6, groups: 1 }), 'Your 6 Bots and 1 group chat are still here')
   assert.equal(t('zh', 'hint.reinstall', { bots: 6, groups: 1 }), '上次的 6 个 Bot 和 1 个群聊都在')
   assert.equal(t('en', 'hint.reinstall', { bots: 1 }), 'Your 1 Bot and {groups|group chat|group chats} are still here')
+  assert.equal(t('es', 'hint.reinstall', { bots: 1, groups: 6 }), 'Siguen aquí 1 Bot y 6 chats de grupo')
+  assert.equal(t('es', 'card.copying.eta', { n: 1 }), 'Tiempo restante: alrededor de 1 minuto')
 })
 
-test('langOf gives zh for every Chinese locale and en otherwise', () => {
+test('langOf gives zh for every Chinese locale, es for every Spanish one and en otherwise', () => {
   assert.equal(langOf('zh-CN'), 'zh')
   assert.equal(langOf('ZH-tw'), 'zh')
+  assert.equal(langOf('es'), 'es')
+  assert.equal(langOf('es-ES'), 'es')
+  assert.equal(langOf('es-419'), 'es')
   assert.equal(langOf('en-US'), 'en')
   assert.equal(langOf('fr'), 'en')
   assert.equal(langOf(''), 'en')
+})
+
+test('the tray and the menu speak every language of the table', async () => {
+  const { SHELL_TEXT } = await import('../src/shell.mjs')
+  assert.deepEqual(Object.keys(SHELL_TEXT).sort(), Object.keys(TEXT).sort())
+  for (const lang of Object.keys(SHELL_TEXT)) assert.deepEqual(Object.keys(SHELL_TEXT[lang]).sort(), Object.keys(SHELL_TEXT.zh).sort(), lang)
 })
 
 test('the generated blocks of the start page are current', () => {

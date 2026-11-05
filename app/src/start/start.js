@@ -8,7 +8,7 @@ import { createDirector, reduced, play, spring, sleep, clamped } from './whale.j
 
 const root = document.documentElement
 const asked = new URLSearchParams(location.search).get('start')
-const START = ['first', 'later', 'moving'].includes(asked) ? asked : 'first'
+const START = ['first', 'later', 'moving', 'server'].includes(asked) ? asked : 'first'
 const resume = performance.getEntriesByType('navigation')[0]?.type === 'reload'
 const bridge = window.dsBotStart
 if (resume) root.dataset.resume = ''
@@ -48,7 +48,7 @@ function render(el, vars = {}) {
   }))
 }
 function renderStatic() {
-  root.lang = lang === 'zh' ? 'zh-CN' : 'en'
+  root.lang = lang === 'zh' ? 'zh-CN' : lang
   for (const el of document.querySelectorAll('.track [data-t], .footrow [data-t], .caption [data-t]')) render(el)
   $('.track').setAttribute('aria-label', say('status.track'))
   for (const st of document.querySelectorAll('.station')) st.querySelector('.sr').textContent = say(`status.state.${st.dataset.state}`)
@@ -87,8 +87,8 @@ function announce(text) { if (text) live.textContent = text }
 // 「进去吧」 lets the line before it be read for READ_MS first, and the director starts the
 // celebration READY_MS (whale.js) after 「进去吧」 is up.
 const HOLDS = { 'voice.hello': 1500, 'voice.found': 700 }
-// The line of a later start, a data move and the two failure views.
-const VOICES = { later: 'voice.opening', moving: 'voice.moving', failed: 'voice.failed', viewFailed: 'voice.viewFailed' }
+// The line of a later start, a data move, a team on a server and the two failure views.
+const VOICES = { later: 'voice.opening', moving: 'voice.moving', server: 'voice.connecting', failed: 'voice.failed', viewFailed: 'voice.viewFailed' }
 const HOLD_MS = 900
 const READ_MS = 400
 const FADE_MS = 160
@@ -328,7 +328,7 @@ async function showBlock(name, jump) {
     enter(el)
     fillBlock(name)
     morph(el.offsetHeight, jump)
-    ;[...el.querySelectorAll('.btn[data-look=primary]')].find(b => b.checkVisibility())?.focus({ preventScroll: true })
+    ;(el.querySelector('.link-input') ?? [...el.querySelectorAll('.btn[data-look=primary]')].find(b => b.checkVisibility()))?.focus({ preventScroll: true })
     announce(cardWords(el, name))
     return
   }
@@ -365,6 +365,7 @@ function fillBlock(name) {
   if (name === 'import') importCard(el)
   if (name === 'copying') copying(el)
   if (name === 'failed') failed(el)
+  if (name === 'link') linkCard(el)
 }
 let missSeen = 0
 let missTimer = 0
@@ -467,6 +468,20 @@ function failed(el) {
   el.querySelector('[data-main]').dataset.look = update && update.state !== 'failed' ? 'soft' : 'primary'
   if (update?.state === 'downloading') bar(banner.querySelector('.bar-fill'), (update.percent ?? 0) / 100, true)
 }
+// The access link card (server mode without a gateway): the field shows the shape of the link,
+// and the line under it why the last one did not work.
+function linkCard(el) {
+  const card = s.card ?? {}
+  const input = el.querySelector('.link-input')
+  input.placeholder = card.host ? `https://${card.host}/?token=…` : ''
+  input.setAttribute('aria-label', say('status.link'))
+  el.querySelector('[data-problem]').hidden = !card.problem
+}
+// The link goes to the main process as it was pasted; the main process checks it.
+function sendLink(card) {
+  director.nod()
+  bridge?.act('link', { value: card.querySelector('.link-input').value })
+}
 function toggleDetails(button) {
   const card = button.closest('.card')
   const log = card.querySelector('.log')
@@ -501,8 +516,14 @@ document.addEventListener('click', (event) => {
   if (name === 'toggleModels') return toggleModels(button)
   if (name === 'copyDetails') copiedLabel(button)
   if (name === 'importModel') toggleModels(button.closest('.card').querySelector('[data-act=toggleModels]'), false)
+  if (name === 'link') return sendLink(button.closest('.card'))
   if (name === 'answer' || name === 'wait' || name === 'keepCopying') director.nod()
   bridge?.act(name, value === undefined ? undefined : { value })
+})
+document.addEventListener('keydown', (event) => {
+  if (event.key !== 'Enter' || !event.target.matches?.('.link-input')) return
+  event.preventDefault()
+  sendLink(event.target.closest('.card'))
 })
 document.addEventListener('change', (event) => {
   const box = event.target.closest?.('input[data-opt]')

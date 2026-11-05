@@ -21,9 +21,16 @@ npm installs `ds-bot` from `../ds-bot` as a copy of its package files (`install-
 | `DS_BOT_HOME` | The data location: the `DSH_HOME` of the app. When it is set, the app asks nothing at its first start and imports nothing | The folder chosen at the first start |
 | `DS_BOT_WORKSPACE` | With `DS_BOT_HOME`: the team workspace | `bot/workspace` in the data location |
 | `DS_BOT_SHELL_DATA` | The app's own data (window, Chromium storage, the Bot browsers' logins, `locations.json`) | Electron's `userData` (Windows: `%APPDATA%\DS Bot`; macOS: `~/Library/Application Support/DS Bot`) |
+| `ATENEA_SERVER_URL` | Server mode: the `https://` address of an Atenea server whose team the window opens; no local engine, data location, import or Office runtime starts. `local` or an empty value keeps the local engine. Without it, `server.json` (`{"url": "https://…"}`) in the app's own data, then `atenea.serverUrl` in `package.json`, decide. An address that cannot be used stops the start (see [Server mode](#server-mode)) | `https://ia.iruzlabs.com` (`atenea.serverUrl` in `package.json`) |
 | `DS_BOT_UPDATE_URL` | Windows and a Linux AppImage: a folder URL with `latest.yml` / `latest-linux.yml` and the installer. macOS and a Linux deb: a URL returning a JSON list like GitHub's `releases` API; a release counts only when this machine's package is attached. Prereleases count only for prerelease installs (see [Updates](#updates)). With `DS_BOT_HOME`, the app checks only when this is set | The newest GitHub release |
 
 Existing installations keep their shell data, browser logins and saved locations in place. New installations use the DS Bot directory. A saved team workspace keeps its path; only a new workspace defaults to `~/DS Bot`.
+
+## Server mode
+
+The package opens the company's Atenea server (`atenea.serverUrl` in `package.json`) instead of starting its own engine. The design is in [docs/plans/2026-11-05-desktop-server-client.md](../docs/plans/2026-11-05-desktop-server-client.md). The app asks the server with `GET /` (4 s): any HTTP answer, 401 included, means it is there; otherwise the start window says to connect to the Iruz VPN and asks again every 5 s. The server's pages and its sign-in (the gateway's `/auth` pages and Cognito's hosted pages) stay in the window, so that the gateway's session cookie lands there; the window shows the sign-in and goes on to the team view after it. Google, Microsoft and every other site open in the system browser, and a sign-in that tries to go on to Google or Microsoft is refused with a message. Without the gateway, while DSH Web answers 401, the start window asks for the access link (`https://<server>/?token=…`), which loads once and is never logged. The Bot browsers, the data location and its move need the local engine and are not offered.
+
+Run from source on the local engine with `ATENEA_SERVER_URL=local npm start`. Every check that starts the app sets it.
 
 ## Run from source (Windows)
 
@@ -143,11 +150,12 @@ The launch URL of the Host is good for one use only. When the first load never c
 
 | File | What it does |
 |---|---|
-| `src/main.mjs` | Main process: one instance, the window, which loads the Host's loopback address as DSH Web does, and the sign-in page DSH opens, which goes to the system browser |
+| `src/main.mjs` | Main process: one instance, the window, which loads the Host's loopback address as DSH Web does, and the sign-in page DSH opens, which goes to the system browser. In server mode it asks the server, shows the VPN and access link cards and loads the server's page instead |
+| `src/server.mjs` | Server mode's rules: where the address comes from and which ones are accepted, whether the server answered, where the window's pages go, the permissions of the server's page and the pasted access link |
 | `src/shell.mjs`, `src/tray.mjs`, `src/background-notice.mjs` | The window and the tray: the window hides instead of closing, the tray opens it again and quits the app, and the one-time confirmation before the window hides |
 | `src/update-prompt.mjs` | An update prompt that waits for the window to be shown again |
 | `src/host-port.mjs` | The Host's port, kept between starts, since the page keeps its storage per address |
-| `src/preload.cjs` | Hands DS Bot's settings the data location and its move, and DS Bot's Bot browsers their webview leases and cookie imports. On Windows it marks the page for the frameless window and sends the caption buttons the colors of the surface under them |
+| `src/preload.cjs` | Hands DS Bot's settings the data location and its move, and DS Bot's Bot browsers their webview leases and cookie imports. On Windows it marks the page for the frameless window and sends the caption buttons the colors of the surface under them. A server's page (server mode) gets only the hand-off and the app's updater |
 | `src/bot-browser.mjs` | The Bot browsers' webviews: only a leased one attaches, with fixed preferences; each Bot's logins stay on disk until the Bot is deleted; pages cannot reach the Host |
 | `src/cookie-parse.mjs`, `src/cookie-import.mjs`, `src/browser-sources.mjs` | Cookie imports: the cookie-file parser (Cookie-Editor JSON, Netscape, Playwright storageState), the write into a Bot's partition with read-back and flush, and the installed-browser profiles a source is cloned from — the source browser itself decrypts its own store over a CDP pipe; values never leave the main process |
 | `src/window-frame.mjs`, `src/mica.css` | The frameless Windows window: the caption band, when Mica is available (Windows 11 22H2 and later), and the stylesheet that lets Mica through the sidebar |

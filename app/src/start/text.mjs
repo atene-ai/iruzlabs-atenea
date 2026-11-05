@@ -2,7 +2,7 @@
 // dialogs of the main process (choosing a folder, moving the data, the import, updates). Product
 // names in dialog titles (DS Bot, DSH Desktop, DSH Web) are constants, not copy.
 // docs/plans/2026-10-29-start-copy.md decides the keys and the layers; zh is the source, en
-// mirrors it key by key with the same placeholders.
+// and es (Spanish, this fork's first language) mirror it key by key with the same placeholders.
 //
 // A key is <layer>.<thing>[.<part>]; the layer says where the line is on screen:
 //   voice   the whale's line: one line, at most 16 characters, no full stop (a question mark is fine)
@@ -19,7 +19,8 @@
 //   dialog  system dialogs: sentences ending in 。 or ？, picker titles without a full stop
 //
 // Placeholders are {name}; paths, sizes, names and versions come from the snapshot or the
-// caller, never from here. {name|one|many} picks the English singular or plural by the value.
+// caller, never from here. {name|one|many} picks the English or Spanish singular or plural by the
+// value.
 export const TEXT = {
   zh: {
     // voice
@@ -38,6 +39,7 @@ export const TEXT = {
     'voice.moving': '正在搬 Atenea 的数据…',
     'voice.failed': 'Atenea 没能启动',
     'voice.viewFailed': '团队界面没有加载出来',
+    'voice.connecting': '正在连接 Atenea…',
     // say
     'say.space': '{drive} 盘有点挤',
     'say.permission': '这里不让我放东西',
@@ -49,6 +51,8 @@ export const TEXT = {
     'say.inUse': 'DeepSeek Harness 还在用这个团队',
     'say.newer': '这些对话比我新',
     'say.copying': '正在搬过来',
+    'say.vpn': '连上 Iruz 的 VPN',
+    'say.link': '贴上你的访问链接',
     // hint
     'hint.model': '待会儿要接一个模型：DeepSeek 账号或 API Key',
     'hint.preview': '里面先有一页说明，点「继续」就行',
@@ -83,6 +87,12 @@ export const TEXT = {
     'card.update.installing': '正在安装，装好后会重新打开。',
     'card.update.failed': '下载失败。',
     'card.update.slow': '下载太慢？',
+    'card.vpn.away': 'Atenea 只能在 Iruz 的 VPN 里使用，不连 VPN 时 {host} 不会回应。连上 VPN 后，Atenea 会自己接着打开。',
+    'card.vpn.tls': '和 {host} 的连接不安全（证书无效），所以 Atenea 没有连接。请连上 Iruz 的 VPN；已经连上的话，请告诉 Atenea 的管理员。',
+    'card.vpn.auto': 'Atenea 每 5 秒会再试一次。',
+    'card.link.lead': '进入 {host} 需要你的访问链接。把它贴在这里，打开你的团队。',
+    'card.link.wrong': '这不是 {host} 的访问链接。',
+    'card.link.spent': '{host} 没有接受这个链接，它可能已经用过或过期了。请要一个新的。',
     // reason
     'reason.place.space': '{drive} 盘只剩 {free}。',
     'reason.place.permission': 'Atenea 没有权限在 {path} 里写文件。',
@@ -96,6 +106,7 @@ export const TEXT = {
     'reason.start.files': '程序文件不完整，可能被杀毒软件拦掉了一部分。',
     'reason.start.engine': '本机引擎启动到一半停下了。',
     'reason.start.other': '出了点意外。',
+    'reason.start.server': '服务器地址无效：必须以 https:// 开头，主机名后面不能再有别的。',
     'reason.copy.inUse': '文件被别的程序占用',
     'reason.copy.permission': '没有权限读取',
     'reason.copy.full': '磁盘满了',
@@ -133,6 +144,7 @@ export const TEXT = {
     'btn.notNowRestart': '先不重启',
     'btn.notNowDownload': '先不下载',
     'btn.ok': '确定',
+    'btn.openLink': '打开',
     // note
     'note.changeLater': '以后可以在 设置 → 通用 → 位置 里改。',
     'note.copyLater': '也可以在 设置 → 通用 → 位置 里复制。',
@@ -155,6 +167,7 @@ export const TEXT = {
     'status.sr.active': '{phase}：进行中',
     'status.sr.done': '{phase}：已完成',
     'status.elapsed': '已用 {n} 秒',
+    'status.link': '访问链接',
     // dialog
     'dialog.pickRoot': '选择 Atenea 放数据的位置',
     'dialog.pickMove': '选择 Atenea 数据的新文件夹',
@@ -180,6 +193,7 @@ export const TEXT = {
     'dialog.update.availableDetail': '这个版本不能自己更新。请到发布页下载新版，再用它替换「应用程序」里的 Atenea。',
     'dialog.update.onFailure': 'Atenea {version} 下载完会自动安装，然后重新打开。',
     'dialog.update.onFailurePage': 'Atenea {version} 已经发布。关掉这个对话框后，会打开它的下载页面。',
+    'dialog.signIn.federated': '这里要用你的 Iruz 用户名和密码（Cognito）登录。{provider} 在 Atenea 的窗口里用不了，所以没有打开。',
   },
   en: {
     // voice
@@ -198,6 +212,7 @@ export const TEXT = {
     'voice.moving': 'Moving Atenea’s data…',
     'voice.failed': 'Atenea couldn’t start',
     'voice.viewFailed': 'The team view didn’t load',
+    'voice.connecting': 'Connecting to Atenea…',
     // say
     'say.space': 'Drive {drive} is a bit full',
     'say.permission': 'I’m not allowed to put things here',
@@ -209,6 +224,8 @@ export const TEXT = {
     'say.inUse': 'DeepSeek Harness is still using this team',
     'say.newer': 'These chats are newer than me',
     'say.copying': 'Moving your team in',
+    'say.vpn': 'Connect to the Iruz VPN',
+    'say.link': 'Paste your access link',
     // hint
     'hint.model': 'Next you’ll connect a model: a DeepSeek account or an API Key',
     'hint.preview': 'A notice page comes first; just click “Continue”',
@@ -243,6 +260,12 @@ export const TEXT = {
     'card.update.installing': 'Installing; it reopens when done.',
     'card.update.failed': 'The download failed.',
     'card.update.slow': 'Download too slow?',
+    'card.vpn.away': 'Atenea only works inside the Iruz VPN, and {host} doesn’t answer outside it. Once you connect to the VPN, Atenea carries on by itself.',
+    'card.vpn.tls': 'The connection to {host} isn’t secure (its certificate isn’t valid), so Atenea didn’t connect. Connect to the Iruz VPN; if you already are, tell whoever runs Atenea.',
+    'card.vpn.auto': 'Atenea tries again every 5 seconds.',
+    'card.link.lead': 'Getting into {host} takes your access link. Paste it here to open your team.',
+    'card.link.wrong': 'That isn’t an access link to {host}.',
+    'card.link.spent': '{host} didn’t accept that link: it may have been used already or expired. Ask for a new one.',
     // reason
     'reason.place.space': 'Only {free} left on drive {drive}.',
     'reason.place.permission': 'Atenea can’t write files in {path}.',
@@ -256,6 +279,7 @@ export const TEXT = {
     'reason.start.files': 'Program files are incomplete; antivirus software may have blocked some of them.',
     'reason.start.engine': 'The local engine stopped halfway through starting.',
     'reason.start.other': 'Something unexpected happened.',
+    'reason.start.server': 'The server address isn’t valid: it must start with https:// and have nothing after the host name.',
     'reason.copy.inUse': 'a file is in use by another program',
     'reason.copy.permission': 'no permission to read',
     'reason.copy.full': 'the disk is full',
@@ -293,6 +317,7 @@ export const TEXT = {
     'btn.notNowRestart': 'Not now',
     'btn.notNowDownload': 'Not now',
     'btn.ok': 'OK',
+    'btn.openLink': 'Open',
     // note
     'note.changeLater': 'You can change this later in Settings → General → Location.',
     'note.copyLater': 'You can also copy the team in Settings → General → Location.',
@@ -315,6 +340,7 @@ export const TEXT = {
     'status.sr.active': '{phase}: in progress',
     'status.sr.done': '{phase}: done',
     'status.elapsed': '{n} s so far',
+    'status.link': 'Access link',
     // dialog
     'dialog.pickRoot': 'Choose where Atenea keeps its data',
     'dialog.pickMove': 'Choose a new folder for Atenea’s data',
@@ -340,6 +366,180 @@ export const TEXT = {
     'dialog.update.availableDetail': 'This version can’t update itself. Download the new version from its release page, then replace Atenea in Applications with it.',
     'dialog.update.onFailure': 'Atenea {version} installs itself when its download is done, and then opens again.',
     'dialog.update.onFailurePage': 'Atenea {version} is out. Once this box is closed, its download page opens.',
+    'dialog.signIn.federated': 'This sign-in must use your Iruz user name and password (Cognito). {provider} doesn’t work in Atenea’s window, so it wasn’t opened.',
+  },
+  es: {
+    // voice
+    'voice.hello': 'Hola, soy Atenea',
+    'voice.helloName': 'Hola, soy {name}',
+    'voice.helloBack': 'Hola, aquí estoy',
+    'voice.data': 'Primero, un sitio para mis cosas',
+    'voice.found': 'Encontrado',
+    'voice.engine': 'Calentando motores, un momento',
+    'voice.slow10': 'La primera vez tarda un poco más',
+    'voice.slow45': 'Está tardando: puede que el antivirus esté revisando archivos nuevos',
+    'voice.team': 'Voy a abrir la puerta',
+    'voice.ready': 'Adelante',
+    'voice.watchdog': 'Está tardando demasiado. ¿Lo intento otra vez?',
+    'voice.opening': 'Abriendo tu equipo…',
+    'voice.moving': 'Moviendo los datos de Atenea…',
+    'voice.failed': 'Atenea no pudo arrancar',
+    'voice.viewFailed': 'La vista del equipo no cargó',
+    'voice.connecting': 'Conectando con Atenea…',
+    // say
+    'say.space': 'La unidad {drive} está algo llena',
+    'say.permission': 'Aquí no me dejan guardar cosas',
+    'say.rejected': 'Ese sitio no sirve',
+    'say.picked': 'Añadí una carpeta más',
+    'say.missing': 'Tus datos no están donde estaban',
+    'say.import': 'Encontré tu equipo anterior',
+    'say.importSpace': 'No hay espacio suficiente',
+    'say.inUse': 'DeepSeek Harness todavía usa este equipo',
+    'say.newer': 'Estas conversaciones son más nuevas que yo',
+    'say.copying': 'Trayendo tu equipo',
+    'say.vpn': 'Conéctate a la VPN de Iruz',
+    'say.link': 'Pega tu enlace de acceso',
+    // hint
+    'hint.model': 'Después conectarás un modelo: una cuenta de DeepSeek o una API Key',
+    'hint.preview': 'Primero verás una página de aviso; pulsa «Continue»',
+    'hint.reinstall': 'Siguen aquí {bots|Bot|Bots} y {groups|chat de grupo|chats de grupo}',
+    'hint.space': 'Solo quedan {free} en la unidad {drive}',
+    'hint.slowLater': 'Más lento que de costumbre; espera un poco más',
+    // card
+    'card.recommend.ask': '¿Ponerlo en la unidad {rec} ({recFree} libres)?',
+    'card.missing.lead': 'No encuentro la carpeta de datos {path}. Puede que el disco externo esté desconectado, o que la carpeta se haya movido o borrado. Los datos antiguos no se tocarán.',
+    'card.missing.retryMissed': 'Sigo sin encontrar esta carpeta.',
+    'card.picked.lead': 'Irá en {path}.',
+    'card.import.lead': 'DeepSeek Harness tiene {bots|Bot|Bots} y {groups|chat de grupo|chats de grupo} (conversaciones {chats}, archivos de trabajo {work}). ¿Copiarlos?',
+    'card.import.extra': 'La copia ocupa {total} más; los originales de DeepSeek Harness no se tocan.',
+    'card.import.found': 'Encontré {bots|Bot|Bots} ({names} y otros), {groups|chat de grupo|chats de grupo} y {sessions|conversación|conversaciones} en {path}.',
+    'card.import.scope': 'Se copian: Bots, chats de grupo, memoria, conversaciones, adjuntos, ajustes de modelos y API Keys. No se copian: MCP, skills ni DSH Agent. Nada cambia en DeepSeek Harness; después de la copia cada lado sigue por su cuenta.',
+    'card.import.model': 'Ajustes de modelos: {model}',
+    'card.import.optRegen': 'Omitir carpetas que se pueden regenerar',
+    'card.import.optSkipWork': 'No copiar todavía los archivos de trabajo',
+    'card.importSpace.lead': 'No hay espacio suficiente: la copia necesita unos {need}, a la unidad {drive} le quedan {free} y faltan {short}.',
+    'card.copying.step1': 'Revisando conversaciones {a}/{b}',
+    'card.copying.step2': 'Copiando Bots y conversaciones {a} / {b}',
+    'card.copying.step3': 'Arrancando el equipo',
+    'card.copying.eta': 'Tiempo restante: alrededor de {n|minuto|minutos}',
+    'card.copying.etaSoon': 'Queda menos de un minuto',
+    'card.copying.stopConfirm': 'Al parar no queda ningún equipo copiado a medias, y el equipo de DeepSeek Harness no se ve afectado.',
+    'card.inUse.lead': 'Cierra DSH Desktop por completo (también su icono en la bandeja, abajo a la derecha de la barra de tareas) y cierra DSH Web; esto seguirá solo.',
+    'card.newerUpdating.lead': 'Atenea {version} puede leerlas y se está descargando ({p}%). Al instalarse se vuelve a abrir y copia el equipo.',
+    'card.newer.lead': 'Estas conversaciones las escribió un DeepSeek Harness más nuevo, que Atenea todavía no puede leer.',
+    'card.importFailed.lead': 'El equipo no se copió entero: {reason}. El equipo de DeepSeek Harness no ha cambiado.',
+    'card.update.available': 'Ya salió Atenea {version}, que puede arreglar esto.',
+    'card.update.downloading': 'Descargando {version} ({p}%, {a}/{b} MB)',
+    'card.update.installing': 'Instalando; se vuelve a abrir al terminar.',
+    'card.update.failed': 'La descarga falló.',
+    'card.update.slow': '¿La descarga va lenta?',
+    'card.vpn.away': 'Atenea solo funciona dentro de la VPN de Iruz, y {host} no responde fuera de ella. En cuanto te conectes a la VPN, Atenea seguirá sola.',
+    'card.vpn.tls': 'La conexión con {host} no es segura (su certificado no es válido), así que Atenea no se conectó. Conéctate a la VPN de Iruz; si ya lo estás, avisa a quien administra Atenea.',
+    'card.vpn.auto': 'Atenea lo vuelve a intentar cada 5 segundos.',
+    'card.link.lead': 'Para entrar en {host} hace falta tu enlace de acceso. Pégalo aquí para abrir tu equipo.',
+    'card.link.wrong': 'Ese no es un enlace de acceso a {host}.',
+    'card.link.spent': '{host} no aceptó ese enlace: puede que ya se haya usado o que haya caducado. Pide uno nuevo.',
+    // reason
+    'reason.place.space': 'Solo quedan {free} en la unidad {drive}.',
+    'reason.place.permission': 'Atenea no puede escribir archivos en {path}.',
+    'reason.place.onedrive': '{path} está en OneDrive; la sincronización interrumpe las conversaciones mientras se escriben.',
+    'reason.place.foreign': '{path} ya tiene otros archivos.',
+    'reason.place.dsh': '{path} son los datos de DeepSeek Harness.',
+    'reason.place.program': '{path} está en la carpeta del programa, que se borra al desinstalar.',
+    'reason.place.nested': '{path} se solapa con donde están ahora los datos.',
+    'reason.start.permission': 'No hay permiso para escribir.',
+    'reason.start.space': 'No hay espacio suficiente en el disco.',
+    'reason.start.files': 'Faltan archivos del programa; puede que el antivirus haya bloqueado algunos.',
+    'reason.start.engine': 'El motor local se detuvo a mitad del arranque.',
+    'reason.start.other': 'Pasó algo inesperado.',
+    'reason.start.server': 'La dirección del servidor no es válida: tiene que empezar por https:// y no llevar nada después del nombre.',
+    'reason.copy.inUse': 'otro programa está usando un archivo',
+    'reason.copy.permission': 'no hay permiso de lectura',
+    'reason.copy.full': 'el disco está lleno',
+    // btn
+    'btn.retry': 'Reintentar',
+    'btn.wait': 'Seguir esperando',
+    'btn.openLogs': 'Abrir carpeta de registros',
+    'btn.freshStart': 'Empezar con un equipo nuevo…',
+    'btn.useRec': 'Ponerlo en la unidad {rec}',
+    'btn.keepDrive': 'Dejarlo en la unidad {drive}',
+    'btn.otherPlace': 'Otra ubicación…',
+    'btn.pickPlace': 'Elegir otra ubicación…',
+    'btn.changePlace': 'Cambiar la ubicación…',
+    'btn.relocate': 'Volver a encontrarla…',
+    'btn.continue': 'Continuar',
+    'btn.repick': 'Elegir otra vez…',
+    'btn.copy': 'Copiarlos',
+    'btn.skipCopy': 'No copiar todavía',
+    'btn.more': 'Detalles',
+    'btn.changeModel': 'Cambiar',
+    'btn.stopCopy': 'Parar la copia',
+    'btn.keepCopying': 'Seguir copiando',
+    'btn.startWithout': 'Empezar sin el equipo',
+    'btn.copyDetails': 'Copiar detalles',
+    'btn.copied': 'Copiado',
+    'btn.details': 'Detalles',
+    'btn.install': 'Descargar e instalar',
+    'btn.manualDownload': 'Descargar a mano',
+    'btn.reload': 'Recargar',
+    'btn.move': 'Mover y reiniciar',
+    'btn.cancel': 'Cancelar',
+    'btn.quit': 'Salir',
+    'btn.restart': 'Reiniciar ahora',
+    'btn.download': 'Descargar',
+    'btn.notNowRestart': 'Ahora no',
+    'btn.notNowDownload': 'Ahora no',
+    'btn.ok': 'Aceptar',
+    'btn.openLink': 'Entrar',
+    // note
+    'note.changeLater': 'Puedes cambiarlo más adelante en Settings → General → Location.',
+    'note.copyLater': 'También puedes copiar el equipo en Settings → General → Location.',
+    'note.copyAgain': 'Puedes copiar el equipo más adelante en Settings → General → Location.',
+    // foot
+    'foot.community': 'Un proyecto comunitario de código abierto, no un producto oficial de DeepSeek',
+    'foot.place.drive': 'Datos en la unidad {drive}, {free} libres',
+    'foot.place.driveOnly': 'Datos en la unidad {drive}',
+    'foot.place.path': 'Datos en {path}, {free} libres',
+    'foot.place.pathOnly': 'Datos en {path}',
+    // status
+    'status.track': 'Progreso del arranque',
+    'status.phase.data': 'Preparar la carpeta de datos',
+    'status.phase.engine': 'Arrancar el motor local',
+    'status.phase.team': 'Abrir el equipo',
+    'status.state.pending': 'Sin empezar',
+    'status.state.active': 'En curso',
+    'status.state.done': 'Hecho',
+    'status.state.failed': 'Sin terminar',
+    'status.sr.active': '{phase}: en curso',
+    'status.sr.done': '{phase}: hecho',
+    'status.elapsed': '{n} s hasta ahora',
+    'status.link': 'Enlace de acceso',
+    // dialog
+    'dialog.pickRoot': 'Elige dónde guarda Atenea sus datos',
+    'dialog.pickMove': 'Elige una carpeta nueva para los datos de Atenea',
+    'dialog.move.inDsh': 'Elige una carpeta fuera de los datos de DeepSeek Harness ({home}).',
+    'dialog.move.inProgram': 'Elige un sitio fuera de la carpeta del programa: al desinstalar se borra la carpeta del programa.',
+    'dialog.move.drive': 'Elige una carpeta, no una unidad entera.',
+    'dialog.move.nested': 'Elige un sitio fuera de la carpeta de datos actual.',
+    'dialog.move.workspace': 'La carpeta de datos y el espacio de trabajo del equipo no pueden contenerse uno al otro.',
+    'dialog.move.notEmpty': 'Elige una carpeta vacía o crea una nueva.',
+    'dialog.move.confirm': '¿Mover los datos de Atenea a {to}?',
+    'dialog.move.detail': 'Atenea copia allí sus datos y vuelve a arrancar. {from} se queda como está; puedes borrarlo tú cuando todo funcione.',
+    'dialog.move.inUse': 'Otro DeepSeek Harness está usando estos datos, así que no se movieron. Ciérralo e inténtalo otra vez.',
+    'dialog.move.failed': 'Los datos no se copiaron: {message}\n\nAtenea sigue con sus datos donde estaban.',
+    'dialog.import.found': 'DeepSeek Harness tiene {bots|Bot|Bots} y {groups|chat de grupo|chats de grupo}. ¿Copiarlos a Atenea?',
+    'dialog.import.foundDetail': 'Se copian: Bots, chats de grupo, memoria, conversaciones, adjuntos, ajustes de modelos y API Keys. Nada cambia en {home}; después de la copia cada lado sigue por su cuenta.',
+    'dialog.import.inUse': 'DeepSeek Harness está usando este equipo. Ciérralo e inténtalo otra vez.',
+    'dialog.import.newer': 'Hay {n|conversación escrita|conversaciones escritas} por un DeepSeek Harness más nuevo de lo que esta versión de Atenea puede leer. Actualiza Atenea primero y luego ábrela para copiar el equipo.',
+    'dialog.import.whichModels': '¿Qué ajustes de modelos debe usar Atenea?',
+    'dialog.import.failed': 'El equipo no se copió entero: {message}\n\nAtenea empieza con un equipo nuevo. El equipo de DeepSeek Harness no ha cambiado.',
+    'dialog.update.ready': 'Atenea {version} ya se descargó.',
+    'dialog.update.readyDetail': 'Reinicia ahora para actualizar; si no, se instala la próxima vez que salgas.',
+    'dialog.update.available': 'Ya salió Atenea {version}.',
+    'dialog.update.availableDetail': 'Esta versión no puede actualizarse sola. Descarga la versión nueva desde su página de publicación y reemplaza con ella Atenea en Aplicaciones.',
+    'dialog.update.onFailure': 'Atenea {version} se instala sola cuando termine de descargarse y después se vuelve a abrir.',
+    'dialog.update.onFailurePage': 'Ya salió Atenea {version}. Al cerrar este cuadro se abre su página de descarga.',
+    'dialog.signIn.federated': 'Este inicio de sesión tiene que hacerse con tu usuario y contraseña de Iruz (Cognito). {provider} no funciona dentro de la ventana de Atenea, así que no se abrió.',
   },
 }
 
@@ -359,4 +559,8 @@ export function t(lang, key, vars) {
   return vars ? fill(text, vars) : text
 }
 
-export const langOf = locale => (String(locale ?? '').toLowerCase().startsWith('zh') ? 'zh' : 'en')
+export function langOf(locale) {
+  const tag = String(locale ?? '').toLowerCase()
+  if (tag.startsWith('zh')) return 'zh'
+  return tag === 'es' || tag.startsWith('es-') ? 'es' : 'en'
+}

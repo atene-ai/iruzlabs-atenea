@@ -25,6 +25,15 @@ export const SHELL_TEXT = {
     fallback: '系统托盘不可用，Atenea 不能留在后台。要结束它吗？',
     cancel: '取消',
   },
+  es: {
+    tooltip: 'Atenea',
+    open: 'Abrir Atenea',
+    quit: 'Salir de Atenea',
+    notice: 'Atenea sigue abierta en la bandeja del sistema. Sus Bots siguen trabajando con la ventana cerrada.',
+    noticeConfirm: 'De acuerdo',
+    fallback: 'La bandeja del sistema no está disponible, así que Atenea no puede quedarse en segundo plano. ¿Quieres cerrarla?',
+    cancel: 'Cancelar',
+  },
 }
 
 /**

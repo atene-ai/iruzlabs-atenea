@@ -408,6 +408,8 @@ try {
     // Without a corporate sign-in no Bot starts work (ds-bot/src/host/auth.js), and this check
     // waits for the mock model's greeting.
     ATENEA_AUTH_REQUIRED: '0',
+    // The package's default is the company server; this check runs the app's own engine.
+    ATENEA_SERVER_URL: 'local',
   })
   const app = spawn(packedApp, [`--remote-debugging-port=${String(port)}`, `--inspect=127.0.0.1:${String(mainPort)}`], { stdio: 'inherit', env })
   children.push(app)

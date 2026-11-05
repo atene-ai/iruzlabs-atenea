@@ -3808,6 +3808,9 @@ div:has(> nav [class*="_marks"]){display:none!important}
 .bt-btw-fail{margin:0 0 6px;color:var(--bt-danger);font-size:13px;line-height:18px}
 @media (prefers-reduced-motion:reduce){.bt-btw-chevron{transition:none}}
 .bt-auth-layer{position:fixed;inset:0;z-index:9000;display:flex;align-items:center;justify-content:center;padding:20px;box-sizing:border-box}
+/* Opaque: nothing of the team shows before sign-in. It covers the title bar, so it moves the window itself. */
+.bt-auth-backdrop{position:absolute;inset:0;background:var(--bt-main);-webkit-app-region:drag}
+.bt-auth-layer .bt-auth-card{-webkit-app-region:no-drag}
 .bt-auth-card{position:relative;width:100%;max-width:440px;background:var(--bt-card);border:1px solid var(--bt-line-2);border-radius:16px;box-shadow:var(--bt-glass-shadow);padding:32px 28px;box-sizing:border-box;display:flex;flex-direction:column;align-items:center;text-align:center;color:var(--bt-ink);font-family:var(--bt-font);animation:bt-veil-in .2s ease-out}
 .bt-auth-avatar{width:56px;height:56px;margin-bottom:12px;object-fit:contain}
 .bt-auth-title{font-size:22px;font-weight:700;letter-spacing:-.02em;margin:0 0 4px;color:var(--bt-ink)}

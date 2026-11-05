@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
-import { apply } from '../index.js'
+import { apply, createRuntime } from '../index.js'
 import { PROVIDERS, authSettings, deniedPage, idTokenClaims, install, isAllowedDomain } from '../src/host/auth.js'
 import { fakeContext } from './fake-ctx.js'
 
@@ -218,4 +218,23 @@ test('a signed-out client may read and sign in, but not act', async (t) => {
   assert.equal(signedIn.ok, true, JSON.stringify(signedIn))
   const allowed = await call('set-prefs', { enterToSend: false })
   assert.equal(allowed.ok, true, JSON.stringify(allowed))
+})
+
+test('no Bot work starts before sign-in; what was asked goes on after it', async (t) => {
+  const home = mkdtempSync(join(tmpdir(), 'dsb-auth-work-'))
+  const ctx = fakeContext()
+  const rt = createRuntime(ctx, { home, authRequired: true, authDevLogin: true, github: false, diagnosticsFile: false })
+  t.after(async () => { await ctx.dispose(); rmSync(home, { recursive: true, force: true, maxRetries: 5 }) })
+  await rt.load()
+
+  // Without the gate this fails at once with "Unknown Bot"; behind it, it does not start.
+  let outcome = 'pending'
+  const work = rt.deliver({ toId: 'nobody', text: 'hi', role: 'request' }).then(() => { outcome = 'done' }, (error) => { outcome = error.message })
+  await new Promise(resolve => setTimeout(resolve, 30))
+  assert.equal(outcome, 'pending')
+
+  await rt.authEndpoint('auth-dev-login', { email: 'luis@iruzlabs.com' })
+  await work
+  assert.equal(outcome, 'Unknown Bot nobody')
+  await rt.whenSignedIn()
 })

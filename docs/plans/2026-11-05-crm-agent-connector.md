@@ -40,7 +40,7 @@
 ### 账户
 
 - `crm_list_accounts` 和 CRM 卡片列出两类账户，各缓存 60 秒：
-  - SLA `GET /api/atenea/me` 里 `sourceSystem` 是 CRM 的账户（默认 `ateneai`，`ATENEA_CRM_SOURCE_SYSTEM` 可改），`externalId` 是 CRM 的子账户 id；`accessLevel` 为 operator 的可修改，viewer 的只读。其他产品的账户不列。
+  - SLA `GET /api/atenea/me` 里 `sourceSystem` 是 CRM 的账户（默认 `sales-os`，即 SLA 记 Sales OS 账户用的来源，`ATENEA_CRM_SOURCE_SYSTEM` 可改），`externalId` 是 CRM 的子账户 id；`accessLevel` 为 operator 的可修改，viewer 的只读。其他产品的账户不列。
   - 已关联的 CRM 用户能进的子账户（`GET /api/subaccounts/v1`）。
 - 工具的 `account` 参数接受列表里的 ref（`sla:<productAccountId>`、`own:<subaccountId>`）、id 或准确的名字；能对上多个时拒绝，要求用 ref。找不到时，回答里附上哪类账户读不到、为什么（比如关联已被撤销）。
 - 一次调用的模式：SLA 账户按级别；自己的 CRM 用户交给 CRM 自己判断（这里算可修改）；没人发起的回合再按所有者允许的封顶。写工具在只读模式下调 SLA 和 CRM 之前就拒绝，并说明原因（级别是 viewer，或所有者只允许只读）。

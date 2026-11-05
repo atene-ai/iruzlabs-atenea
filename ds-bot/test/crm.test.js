@@ -75,8 +75,8 @@ const json = (body, status = 200) => new Response(status === 204 ? null : JSON.s
 const ME = {
   staff: { id: 'u-ana', email: 'ana@example.com', displayName: 'Ana García', role: 'product_lead' },
   accounts: [
-    { productAccountId: PA1, productCode: 'atenea', sourceSystem: 'ateneai', externalId: SUB1, name: 'Cliente Uno', accessLevel: 'operator' },
-    { productAccountId: PA2, productCode: 'atenea', sourceSystem: 'ateneai', externalId: SUB2, name: 'Cliente Dos', accessLevel: 'viewer' },
+    { productAccountId: PA1, productCode: 'atenea', sourceSystem: 'sales-os', externalId: SUB1, name: 'Cliente Uno', accessLevel: 'operator' },
+    { productAccountId: PA2, productCode: 'atenea', sourceSystem: 'sales-os', externalId: SUB2, name: 'Cliente Dos', accessLevel: 'viewer' },
     { productAccountId: '99999999-9999-4999-8999-999999999999', productCode: 'contractors', sourceSystem: 'contractors', externalId: 'x-1', name: 'Other product', accessLevel: 'operator' },
   ],
 }

@@ -243,9 +243,15 @@ export function install(rt) {
 
   const authLocked = () => settings.required && currentUser() === null
 
+  let waiting = []
+  const whenSignedIn = () => (authLocked() ? new Promise(resolve => waiting.push(resolve)) : Promise.resolve())
+
   const signIn = async (user) => {
     state.user = { ...user, loggedInAt: Date.now() }
     await rt.save()
+    const released = waiting
+    waiting = []
+    for (const resolve of released) resolve()
   }
 
   const answer = async (current, req, res) => {
@@ -330,5 +336,5 @@ export function install(rt) {
 
   rt.ctx?.effect?.(() => () => closeFlow(), 'ds-bot: auth')
 
-  Object.assign(rt, { authView, authEndpoint, authLocked, authDomains: settings.domains })
+  Object.assign(rt, { authView, authEndpoint, authLocked, whenSignedIn, authDomains: settings.domains })
 }

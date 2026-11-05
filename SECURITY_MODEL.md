@@ -9,6 +9,7 @@ DS Bot is a team of long-lived LLM Bots built as a plugin on DeepSeek Harness (D
 - **DSH Desktop / DSH Web** with the `ds-bot` plugin, on the user's own computer.
 - **Desktop app** (`app/`, Electron) that runs a pinned DSH with the plugin in its own `DSH_HOME`, and imports a team from `~/.dsh` (read only).
 - **Docker** (`docker/`, `docker-compose.yml`): `dsh web` on `0.0.0.0:3080` (published as `0.0.0.0:13080`), `DSH_PERMISSION_MODE=danger-full-access`, approval `never`. The container is the sandbox boundary.
+- **Atenea server** (`gateway/`, `docker/compose.server.yml`): the Docker image in server mode (`ATENEA_SERVER_MODE=1`, `docker/server.patch.yml`), not published, behind the gateway on `127.0.0.1:13081`, which a VPN-only reverse proxy serves to Iruz Labs staff. The gateway signs staff in (Cognito), checks SLA, holds dsh's single owner cookie and forwards only allowed routes with a signed identity (`x-atenea-identity`) for ds-bot.
 
 Trust boundaries:
 1. Untrusted content -> model -> Bot tools. Web pages, files, search results, connector/MCP results and messages from other Bots reach the model; the model's tool calls run with the Bot's permission preset.
@@ -26,13 +27,14 @@ Trust boundaries:
 - **browser** — Bot browser bridge and browser plugins: `ds-bot/src/host/browser.js`, `browser-plugins.js`, `src/host/browser/`, `browser-plugins/`.
 - **desktop-app** — Electron app: `app/src/` (main, preload, IPC, cookie import, updates, import from `~/.dsh`, move-data), `app/engine/`.
 - **web-search** — `ds-bot/web-search.js`.
-- **docker** — `docker/Dockerfile`, `entrypoint.sh`, `docker.patch.yml`, `docker-compose.yml`.
+- **docker** — `docker/Dockerfile`, `entrypoint.sh`, `docker.patch.yml`, `server.patch.yml`, `docker-compose.yml`, `compose.server.yml`.
+- **gateway** — `gateway/src/` (sign-in, sessions, SLA permissions, path policy, proxy), `gateway/scripts/cognito-app-client.sh`.
 
 ## Entry points and who reaches them
 
 - Chat input from the user (trusted).
 - Content the Bot reads: web pages (Bot browser, `read_browser`, web search), files in the work folder, connector/MCP tool results, messages from other Bots and group chats, scheduled-task prompts. **Attacker-controlled.**
-- `/api/bot` HTTP endpoints and DSH Web UI: the local user; in Docker, anyone who can reach port 13080 (DSH trusted-host list + launch token).
+- `/api/bot` HTTP endpoints and DSH Web UI: the local user; in Docker, anyone who can reach port 13080 (DSH trusted-host list + launch token). On the Atenea server, staff the gateway admitted, all acting as dsh's owner on the routes `gateway/src/policy.js` allows.
 - Electron IPC from the app window.
 
 ## Assets (maintainer-ranked)
@@ -55,10 +57,12 @@ Trust boundaries:
 - HTML widgets in `sandbox="allow-scripts"` iframes; Electron webviews sandboxed with contextIsolation and own partitions; IPC handlers call `assertWindow(event)`.
 - Cookie values stay in the Electron main process (`cookie-import.mjs`).
 - Launch token redacted from host logs (`host-process.mjs`).
+- Atenea server: the gateway verifies Cognito ID tokens, re-checks SLA at most every 60 s, strips client cookies and `x-atenea-*` headers, requires its own Origin for state changes and WebSockets, and refuses owner-only routes; `server.patch.yml` switches off the dsh features whose streams share the unfiltered `/api/remote.mux` socket; the launch token stays out of the log.
 
 ## Out of scope / accepted risk (maintainer)
 
 - **Docker edition: Bots have full access inside the container by design** (`danger-full-access`, approval `never`). A Bot changing or reading files inside the container is not a finding; escaping the container or leaking keys/secrets still is.
+- **Atenea server: admitted staff are not isolated from each other inside dsh.** dsh 0.2.0-rc.2 admits browsers only as its owner, so the Session, job and Workspace calls the UI needs reach every Bot; per-Bot roles hold only where ds-bot checks `x-atenea-identity`. A staff member who can talk to a Bot can also have it read the container's environment (model key, `ATENEA_IDENTITY_SECRET`) and `/data` (gateway/README.md, "What stays possible").
 - DSH itself is upstream; not explicitly ruled out, but fixes belong upstream (hard rule: never patch DSH).
 
 ## Open questions

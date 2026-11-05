@@ -16,13 +16,15 @@ if [ ! -d /data/profiles/web ]; then
 fi
 # A volume keeps the plugin it was seeded with, so a newer image would go on running the
 # old ds-bot. Install this image's package through dsh's plugin manager when the profile
-# has another one; it runs as root before the ownership pass below, offline from the
-# image's pnpm store. The store sits on another filesystem than the volume, so pnpm copies
-# instead of hard-linking. A failed install stops the start rather than serve stale code.
+# has another one; it runs as root before the ownership pass below, from the image's pnpm
+# store. A lockfile written by an older image can make pnpm's supply-chain check want
+# registry metadata the image does not carry, so pnpm may go online for what is missing.
+# The store sits on another filesystem than the volume, so pnpm copies instead of
+# hard-linking. A failed install stops the start rather than serve stale code.
 PLUGIN_ID=$(cat /opt/ds-bot/package-id)
 if [ "$(cat /data/profiles/web/.ds-bot-package 2>/dev/null || true)" != "$PLUGIN_ID" ]; then
   echo "entrypoint: installing $PLUGIN_ID into the web profile"
-  if ! DSH_HOME=/data dsh plugin --profile web add --offline --package-import-method=copy \
+  if ! DSH_HOME=/data dsh plugin --profile web add --prefer-offline --package-import-method=copy \
       --store-dir=/root/.local/share/pnpm/store "/opt/ds-bot/$PLUGIN_ID"; then
     echo "entrypoint: could not install $PLUGIN_ID into the web profile" >&2
     exit 1

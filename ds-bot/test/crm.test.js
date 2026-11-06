@@ -9,7 +9,7 @@ import { REPLY_KIND, SOURCE_KIND } from '../src/host/constants.js'
 import { CRM_CALLBACK_ROUTE, crmFailureText, crmSettings } from '../src/host/crm.js'
 import { tokenExpiry } from '../src/host/identity.js'
 import { authorizeUrl, createLinkStore, idTokenProblem, parseTokenKey, pkcePair, seal, unseal } from '../src/host/crm-link.js'
-import { idArg, idListArg, textArg, wholeArg } from '../src/host/crm-tools.js'
+import { checkImportHeaders, idArg, idListArg, textArg, wholeArg } from '../src/host/crm-tools.js'
 import { fakeApproval, fakeContext } from './fake-ctx.js'
 
 // Keys and hosts only these tests use.
@@ -393,7 +393,7 @@ test('the CRM\'s refusals of a staff grant, and its author limit, come back in p
     },
   })
   t.after(stop)
-  writeFileSync(join(work, 'leads.csv'), 'Nombre,Telefono\nEva,525511112222\n')
+  writeFileSync(join(work, 'leads.csv'), 'Nombre,Correo,Telefono\nEva,,525511112222\n')
   await call('state')
   await asked()
   await assert.rejects(tool('crm_import_leads', { account: `sla:${PA1}:${WS1}`, file: 'leads.csv' }), /records who made it, and it cannot record a staff member yet/)
@@ -601,6 +601,25 @@ test('arguments are checked before anything leaves the host', async (t) => {
   assert.throws(() => idListArg([LEAD1, LEAD2], 'lead_ids', { max: 1 }), /at most 1/)
 })
 
+// IRU-931: the CRM fails the whole job after the upload ("missing required column:
+// correo") when one of its three columns is missing, even if every value is empty.
+test('a CSV without the Nombre, Correo and Telefono columns is refused before the upload', async (t) => {
+  const ok = text => checkImportHeaders(new TextEncoder().encode(text))
+  ok('Nombre,Correo,Telefono\nEva,,525511112222\n')
+  ok('\uFEFF"Nombre","Correo electrónico","Teléfono"\r\nEva,,1\r\n')
+  assert.throws(() => ok('Nombre,Telefono\nEva,525511112222\n'), /no Correo column\. Nothing was imported/)
+  assert.throws(() => ok('name,phone\n'), /no Nombre, Correo, Telefono column/)
+
+  const { call, callback, asked, tool, work, crmCalls, stop } = start()
+  t.after(stop)
+  writeFileSync(join(work, 'leads.csv'), 'Nombre,Telefono\nEva,525511112222\n')
+  const state = new URL((await call('crm-link-start')).value.url).searchParams.get('state')
+  await callback({ state, code: 'test-code' })
+  await asked()
+  await assert.rejects(tool('crm_import_leads', { account: `own:${OWN_SUB}`, file: 'leads.csv' }), /no Correo column/)
+  assert.equal(crmCalls.filter(entry => entry.path.startsWith('/api/contacts')).length, 0)
+})
+
 test('a workspace file outside the Bot\'s folder is not imported', async (t) => {
   const { call, callback, asked, tool, home, crmCalls, stop } = start()
   t.after(stop)
@@ -623,7 +642,7 @@ test('an import uploads the file and follows the job until it ends', async (t) =
     },
   })
   t.after(stop)
-  writeFileSync(join(work, 'leads.csv'), 'Nombre,Telefono\nEva,525511112222\nEva,525511112222\n')
+  writeFileSync(join(work, 'leads.csv'), 'Nombre,Correo,Telefono\nEva,,525511112222\nEva,,525511112222\n')
   const state = new URL((await call('crm-link-start')).value.url).searchParams.get('state')
   await callback({ state, code: 'test-code' })
   await asked()

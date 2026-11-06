@@ -14,6 +14,16 @@ const MESSAGE_READ_MAX = 2000
 const RECEIPTS_MAX = 2000
 const IMPORT_TYPES = { '.csv': 'text/csv', '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }
 const IMPORT_DONE = new Set(['COMPLETED', 'FAILED'])
+// The CRM fails an import job, after the upload, when any of these columns is
+// missing (lowercased, accents dropped, matched as a substring of a header).
+const IMPORT_COLUMNS = ['nombre', 'correo', 'telefono']
+
+export function checkImportHeaders(data) {
+  const first = new TextDecoder().decode(data.subarray(0, 8192)).replace(/^﻿/, '').split(/\r?\n/, 1)[0]
+  const headers = first.split(',').map(header => header.trim().replace(/^"|"$/g, '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase())
+  const missing = IMPORT_COLUMNS.filter(column => !headers.some(header => header.includes(column)))
+  if (missing.length > 0) throw invalid(`The CRM needs the columns Nombre, Correo and Telefono, even when one of them is empty in every row; this file has no ${missing.map(column => column[0].toUpperCase() + column.slice(1)).join(', ')} column. Nothing was imported.`)
+}
 const GENDERS = ['MALE', 'FEMALE', 'OTHER']
 const STATUSES = ['OPEN', 'CLOSED']
 
@@ -277,7 +287,7 @@ export function install(rt, crm) {
 
   tool({
     name: 'crm_import_leads',
-    description: 'Import leads into a CRM account from a CSV (or XLSX) file in your working folder, then wait up to a minute for the import to finish. Headers the CRM knows include Nombre, Apellidos, Correo, Telefono (a name, and an e-mail address or a phone number, are required). With job_id instead of file, it checks an import already started.',
+    description: 'Import leads into a CRM account from a CSV (or XLSX) file in your working folder, then wait up to a minute for the import to finish. The file must have the columns Nombre, Correo and Telefono, even when one of them is empty in every row; Apellidos and others are optional. Each row needs a name, and an e-mail address or a phone number. With job_id instead of file, it checks an import already started.',
     parameters: {
       file: { type: 'string', description: 'Path of the .csv or .xlsx file; a relative path starts in your working folder' },
       job_id: { type: 'string', description: 'The id of an import already started, to check how it went' },
@@ -297,6 +307,7 @@ export function install(rt, crm) {
         return { text: importText(body, !IMPORT_DONE.has(body?.status)), detail: { status: body?.status } }
       }
       const file = await crm.workspaceFile(exec, input.file)
+      if (extname(file.path).toLowerCase() === '.csv') checkImportHeaders(file.data)
       crm.takeWrites(acting, 1)
       const type = IMPORT_TYPES[extname(file.path).toLowerCase()]
       const { body: started } = await call({

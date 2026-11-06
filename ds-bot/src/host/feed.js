@@ -24,7 +24,13 @@ export function install(rt) {
   // the Bots that person may see.
   /** @type {WeakMap<ReadableStreamDefaultController<Uint8Array>, any>} */
   const callers = new WeakMap()
-  const hears = (controller, botId) => {
+  // A Request follows the abort of the signal it was made with only while the
+  // Request itself is alive: the parent's listener reaches the Request's own
+  // AbortController through a WeakRef. Each window's Request is kept until the
+  // window leaves, so a closed connection is always noticed (IRU-920).
+  /** @type {Map<ReadableStreamDefaultController<Uint8Array>, Request>} */
+  const requests = new Map()
+  const hears =(controller, botId) => {
     const caller = callers.get(controller)
     return botId === undefined || caller === undefined || rt.runAs(caller, () => rt.access.sees({ botId }))
   }
@@ -86,6 +92,7 @@ export function install(rt) {
 
   const leave = (controller) => {
     clients.delete(controller)
+    requests.delete(controller)
     if (clients.size === 0) writing.clear()
     try { controller.close() } catch { /* already closed or errored */ }
   }
@@ -112,6 +119,7 @@ export function install(rt) {
             expiry.unref?.()
           }
           clients.add(own)
+          requests.set(own, request)
           send(own, encoder.encode(`event: hello\ndata: ${JSON.stringify({ revision: state.revision })}\n\n`))
         },
         cancel() { clearTimeout(expiry); leave(controller) },

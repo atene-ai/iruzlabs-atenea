@@ -3,6 +3,8 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
+import { setFlagsFromString } from 'node:v8'
+import { runInNewContext } from 'node:vm'
 import { apply } from '../index.js'
 import { fakeContext } from './fake-ctx.js'
 
@@ -129,6 +131,26 @@ test('the live feed tells a window about saves, new chat entries and the reply b
   onStatus({ agent: { id: 'not-a-bot' }, status: 'running' })
   assert.deepEqual(await next('live after the status burst'), { event: 'live', data: {} })
 
+  abort.abort()
+  assert.equal(await next('the end of the stream'), undefined)
+})
+
+// IRU-920: a Request follows its parent's abort only while it is alive, and the
+// feed test hung on CI whenever a garbage collection took the Request first.
+test('a window whose Request was garbage collected still leaves on abort', async (t) => {
+  setFlagsFromString('--expose-gc')
+  const gc = runInNewContext('gc')
+  const { call, stop, routes } = start()
+  t.after(stop)
+  await call('state')
+  const abort = new AbortController()
+  const response = await routes['/api/bot/feed'].fetch(new Request('http://localhost/api/bot/feed', { signal: abort.signal }))
+  const next = reader(response)
+  assert.equal((await next('hello')).event, 'hello')
+  for (let round = 0; round < 3; round += 1) {
+    gc()
+    await new Promise(resolve => setTimeout(resolve, 10))
+  }
   abort.abort()
   assert.equal(await next('the end of the stream'), undefined)
 })
